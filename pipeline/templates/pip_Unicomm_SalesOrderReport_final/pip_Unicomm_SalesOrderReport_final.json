@@ -1,0 +1,3042 @@
+{
+	"$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"factoryName": {
+			"type": "string",
+			"metadata": "Data Factory name"
+		},
+		"LS_Unicomm_SalesOrderReport": {
+			"type": "string"
+		},
+		"LS_ADLSG2_DFXGP_EDW01_STG": {
+			"type": "string"
+		},
+		"LS_AzSynapse_DFXGP_EDW01": {
+			"type": "string"
+		}
+	},
+	"variables": {
+		"factoryId": "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]"
+	},
+	"resources": [
+		{
+			"name": "[concat(parameters('factoryName'), '/pip_Unicomm_SalesOrderReport_final')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Get Token",
+						"type": "WebActivity",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"url": "https://sleepyhead.unicommerce.com/oauth/token?grant_type=password&client_id=my-trusted-client&username=analytics@mysleepyhead.com&password=Unisleepy@123",
+							"method": "GET"
+						}
+					},
+					{
+						"name": "Get Job Code",
+						"type": "WebActivity",
+						"dependsOn": [
+							{
+								"activity": "Set Start Date in EPOCH",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"url": "https://sleepyhead.unicommerce.com/services/rest/v1/export/job/create",
+							"method": "POST",
+							"headers": {
+								"Authorization": {
+									"value": "Bearer @{activity('Get Token').output.access_token}",
+									"type": "Expression"
+								},
+								"Facility": "HOSUR_ITEM"
+							},
+							"body": {
+								"value": "{\n    \"exportJobTypeName\": \"All facility sale order export\",\n    \"exportColums\": [\n        \"soicode\", \"displayorderCode\", \"reversePickupCode\", \"reversePickupCreatedDate\", \"reversePickupReason\", \"notificationEmail\", \"notificationMobile\", \"requireCustomization\", \"cod\", \"shippingAddressId\", \"category\", \"invoiceCode\", \"invoiceCreated\", \"ewbNo\", \"ewbDate\", \"ewbValidTill\", \"shippingAddressName\", \"shippingAddressLine1\", \"shippingAddressLine2\", \"shippingAddressCity\", \"shippingAddressState\", \"shippingAddressCountry\", \"shippingAddressPincode\", \"shippingAddressPhone\", \"billingAddressId\", \"billingAddressName\", \"billingAddressLine1\", \"billingAddressLine2\", \"billingAddressCity\", \"billingAddressState\", \"billingAddressCountry\", \"billingAddressPincode\", \"billingAddressPhone\", \"shippingMethod\", \"skuCode\", \"channelProductId\", \"itemTypeName\", \"itemTypeColor\", \"itemTypeSize\", \"itemTypeBrand\", \"channel\", \"itemRequireCustomization\", \"giftWrap\", \"giftMessage\", \"hsnCode\", \"maxRetailPrice\", \"totalPrice\", \"sellingPrice\", \"costPrice\", \"prepaidAmount\", \"subtotal\", \"discount\", \"gstTaxTypeCode\", \"cgst\", \"igst\", \"sgst\", \"utgst\", \"cess\", \"cgstrate\", \"igstrate\", \"sgstrate\", \"utgstrate\", \"cessrate\", \"TCSAmount\", \"tax\", \"taxValue\", \"voucherCode\", \"shippingCharges\", \"shippingMethodCharges\", \"cashOnDeliveryCharges\", \"giftWrapCharges\", \"packetNumber\", \"displayOrderDateTime\", \"saleOrderCode\", \"onhold\", \"status\", \"priority\", \"currency\", \"currencyConversionRate\", \"SoiStatus\", \"cancellationReason\", \"shippingProvider\", \"shippingCourier\", \"thirdPartyShipping\", \"shippingArrangedBy\", \"ShippingPackageCode\", \"ShippingPackageCreationDate\", \"shippingPackageStatusCode\", \"shippingPackageTypeCode\", \"shippingPackageLength\", \"shippingPackageWidth\", \"shippingPackageHeight\", \"deliveryTime\", \"TrackingNumber\", \"dispatchDate\", \"facility\", \"returnedDate\", \"returnReason\", \"created\", \"updated\", \"combinationIdentifier\", \"combinationDescription\", \"transferPrice\", \"itemCode\", \"itemDetails\", \"imei\", \"actualWeight\", \"gsttin\", \"Cgsttin\", \"tin\", \"paymentInstrc\", \"fulfillmentTat\"\n    ],\n    \"exportFilters\": [\n        {\n            \"id\": \"addedOn\",\n            \"dateRange\": {\n                \"start\": @{variables('StartDate-EPOCH')},\n                \"end\": @{variables('EndDate')}\n            }\n        }\n    ],\n    \"frequency\": \"ONETIME\"\n}",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "Get Excel Link",
+						"type": "WebActivity",
+						"dependsOn": [
+							{
+								"activity": "Get Job Code",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"url": " https://sleepyhead.unicommerce.com/services/rest/v1/export/job/status",
+							"method": "POST",
+							"headers": {
+								"Authorization": {
+									"value": "Bearer @{activity('Get Token').output.access_token}",
+									"type": "Expression"
+								}
+							},
+							"body": {
+								"value": "{\n    \"jobCode\": \"@{activity('Get Job Code').output.jobCode}\"\n}",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "Set variable1-Excel Link",
+						"type": "SetVariable",
+						"dependsOn": [
+							{
+								"activity": "Get Excel Link_copy1",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "MyURL",
+							"value": {
+								"value": "@activity('Get Excel Link_copy1').output.filePath",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "CopyExcelData",
+						"type": "Copy",
+						"dependsOn": [
+							{
+								"activity": "Set variable1-Excel Link",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "DelimitedTextSource",
+								"storeSettings": {
+									"type": "HttpReadSettings",
+									"requestMethod": "GET"
+								},
+								"formatSettings": {
+									"type": "DelimitedTextReadSettings"
+								}
+							},
+							"sink": {
+								"type": "DelimitedTextSink",
+								"storeSettings": {
+									"type": "AzureBlobFSWriteSettings"
+								},
+								"formatSettings": {
+									"type": "DelimitedTextWriteSettings",
+									"quoteAllText": true,
+									"fileExtension": ".csv"
+								}
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"typeConversion": true,
+								"typeConversionSettings": {
+									"allowDataTruncation": true,
+									"treatBooleanAsNumber": false
+								}
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "DS_Unicomm_SalesOrderReport",
+								"type": "DatasetReference",
+								"parameters": {
+									"BaseURL": {
+										"value": "@variables('MyURL')",
+										"type": "Expression"
+									}
+								}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "DS_Unicomm_Sales_Order_Report",
+								"type": "DatasetReference"
+							}
+						]
+					},
+					{
+						"name": "Copy ADLSGen2-Synapse",
+						"type": "Copy",
+						"dependsOn": [
+							{
+								"activity": "CopyExcelData",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "DelimitedTextSource",
+								"storeSettings": {
+									"type": "AzureBlobFSReadSettings",
+									"recursive": true,
+									"wildcardFolderPath": "AllFacilitiesSalesReport/IN",
+									"wildcardFileName": "*.csv",
+									"enablePartitionDiscovery": false
+								},
+								"formatSettings": {
+									"type": "DelimitedTextReadSettings"
+								}
+							},
+							"sink": {
+								"type": "SqlDWSink",
+								"preCopyScript": "Truncate table [STG_Duroflex_BI].[STG_UniCommerceData]",
+								"writeBehavior": "Insert",
+								"disableMetricsCollection": false
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"mappings": [
+									{
+										"source": {
+											"name": "Sale Order Item Code",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Sale Order Item Code",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Display Order Code",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Display Order Code",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Reverse Pickup Code",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Reverse Pickup Code",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Reverse Pickup Created Date",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Reverse Pickup Created Date",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Reverse Pickup Reason",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Reverse Pickup Reason",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Notification Email",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Notification Email",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Notification Mobile",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Notification Mobile",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Require Customization",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Require Customization",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "COD",
+											"type": "String"
+										},
+										"sink": {
+											"name": "COD",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Shipping Address Id",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Shipping Address Id",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Category",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Category",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Invoice Code",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Invoice Code",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Invoice Created",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Invoice Created",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "EWayBill No",
+											"type": "String"
+										},
+										"sink": {
+											"name": "EWayBill No",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "EWayBill Date",
+											"type": "String"
+										},
+										"sink": {
+											"name": "EWayBill Date",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "EWayBill Valid Till",
+											"type": "String"
+										},
+										"sink": {
+											"name": "EWayBill Valid Till",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Shipping Address Name",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Shipping Address Name",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Shipping Address Line 1",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Shipping Address Line 1",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Shipping Address Line 2",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Shipping Address Line 2",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Shipping Address City",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Shipping Address City",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Shipping Address State",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Shipping Address State",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Shipping Address Country",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Shipping Address Country",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Shipping Address Pincode",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Shipping Address Pincode",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Shipping Address Phone",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Shipping Address Phone",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Billing Address Id",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Billing Address Id",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Billing Address Name",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Billing Address Name",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Billing Address Line 1",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Billing Address Line 1",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Billing Address Line 2",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Billing Address Line 2",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Billing Address City",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Billing Address City",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Billing Address State",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Billing Address State",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Billing Address Country",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Billing Address Country",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Billing Address Pincode",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Billing Address Pincode",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Billing Address Phone",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Billing Address Phone",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Shipping Method",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Shipping Method",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Item SKU Code",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Item SKU Code",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Channel Product Id",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Channel Product Id",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Item Type Name",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Item Type Name",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Item Type Color",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Item Type Color",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Item Type Size",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Item Type Size",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Item Type Brand",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Item Type Brand",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Channel Name",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Channel Name",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "SKU Require Customization",
+											"type": "String"
+										},
+										"sink": {
+											"name": "SKU Require Customization",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Gift Wrap",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Gift Wrap",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Gift Message",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Gift Message",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "HSN Code",
+											"type": "String"
+										},
+										"sink": {
+											"name": "HSN Code",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "MRP",
+											"type": "String"
+										},
+										"sink": {
+											"name": "MRP",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Total Price",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Total Price",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Selling Price",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Selling Price",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Cost Price",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Cost Price",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Prepaid Amount",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Prepaid Amount",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Subtotal",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Subtotal",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Discount",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Discount",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "GST Tax Type Code",
+											"type": "String"
+										},
+										"sink": {
+											"name": "GST Tax Type Code",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "CGST",
+											"type": "String"
+										},
+										"sink": {
+											"name": "CGST",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "IGST",
+											"type": "String"
+										},
+										"sink": {
+											"name": "IGST",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "SGST",
+											"type": "String"
+										},
+										"sink": {
+											"name": "SGST",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "UTGST",
+											"type": "String"
+										},
+										"sink": {
+											"name": "UTGST",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "CESS",
+											"type": "String"
+										},
+										"sink": {
+											"name": "CESS",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "CGST Rate",
+											"type": "String"
+										},
+										"sink": {
+											"name": "CGST Rate",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "IGST Rate",
+											"type": "String"
+										},
+										"sink": {
+											"name": "IGST Rate",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "SGST Rate",
+											"type": "String"
+										},
+										"sink": {
+											"name": "SGST Rate",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "UTGST Rate",
+											"type": "String"
+										},
+										"sink": {
+											"name": "UTGST Rate",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "CESS Rate",
+											"type": "String"
+										},
+										"sink": {
+											"name": "CESS Rate",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "TCS Amount",
+											"type": "String"
+										},
+										"sink": {
+											"name": "TCS Amount",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Tax %",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Tax %",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Tax Value",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Tax Value",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Voucher Code",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Voucher Code",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Shipping Charges",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Shipping Charges",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Shipping Method Charges",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Shipping Method Charges",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "COD Service Charges",
+											"type": "String"
+										},
+										"sink": {
+											"name": "COD Service Charges",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Gift Wrap Charges",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Gift Wrap Charges",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Packet Number",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Packet Number",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Order Date as dd/mm/yyyy hh:MM:ss",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Order Date as dd/mm/yyyy hh:MM:ss",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Sale Order Code",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Sale Order Code",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "On Hold",
+											"type": "String"
+										},
+										"sink": {
+											"name": "On Hold",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Sale Order Status",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Sale Order Status",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Priority",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Priority",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Currency",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Currency",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Currency Conversion Rate",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Currency Conversion Rate",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Sale Order Item Status",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Sale Order Item Status",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Cancellation Reason",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Cancellation Reason",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Shipping provider",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Shipping provider",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Shipping Courier",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Shipping Courier",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Channel Shipping",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Channel Shipping",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Shipping Arranged By",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Shipping Arranged By",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Shipping Package Code",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Shipping Package Code",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Shipping Package Creation Date",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Shipping Package Creation Date",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Shipping Package Status Code",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Shipping Package Status Code",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Shipping Package Type",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Shipping Package Type",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Length(mm)",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Length(mm)",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Width(mm)",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Width(mm)",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Height(mm)",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Height(mm)",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Delivery Time",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Delivery Time",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Tracking Number",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Tracking Number",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Dispatch Date",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Dispatch Date",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Facility",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Facility",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Return Date",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Return Date",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Return Reason",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Return Reason",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Created",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Created",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Updated",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Updated",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Combination Identifier",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Combination Identifier",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Combination Description",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Combination Description",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Transfer Price",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Transfer Price",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Item Code",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Item Code",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Item Details",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Item Details",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "IMEI",
+											"type": "String"
+										},
+										"sink": {
+											"name": "IMEI",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Weight",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Weight",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "GSTIN",
+											"type": "String"
+										},
+										"sink": {
+											"name": "GSTIN",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Customer GSTIN",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Customer GSTIN",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "TIN",
+											"type": "String"
+										},
+										"sink": {
+											"name": "TIN",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Payment Instrument",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Payment Instrument",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Fulfillment TAT",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Fulfillment TAT",
+											"type": "String"
+										}
+									}
+								]
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "DS_Unicomm_Copy_CSV",
+								"type": "DatasetReference"
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "LS_Unicomm_SalesOrderReport",
+								"type": "DatasetReference"
+							}
+						]
+					},
+					{
+						"name": "Set variable- End Date in EPOCH",
+						"type": "SetVariable",
+						"dependsOn": [
+							{
+								"activity": "Get_EndDate",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "EndDate",
+							"value": {
+								"value": "@string(sub(div(ticks(variables('EPOCH_EndDate')),10000),div(ticks(pipeline().parameters.param_epoch),10000)))",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "Get-Start Date",
+						"type": "SetVariable",
+						"dependsOn": [
+							{
+								"activity": "Set variable- End Date in EPOCH",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "StartDate",
+							"value": {
+								"value": "@adddays(startOfDay(utcnow()),-62)",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "Get_EndDate",
+						"type": "SetVariable",
+						"dependsOn": [
+							{
+								"activity": "Get Token",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "EPOCH_EndDate",
+							"value": {
+								"value": "@addhours(utcnow(),5)",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "Set Start Date in EPOCH",
+						"type": "SetVariable",
+						"dependsOn": [
+							{
+								"activity": "Get-Start Date",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "StartDate-EPOCH",
+							"value": {
+								"value": "@string(sub(div(ticks(variables('StartDate')),10000),div(ticks(pipeline().parameters.param_epoch),10000)))",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "Wait1",
+						"type": "Wait",
+						"dependsOn": [
+							{
+								"activity": "Get Excel Link",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"waitTimeInSeconds": 120
+						}
+					},
+					{
+						"name": "Get Excel Link_copy1",
+						"type": "WebActivity",
+						"dependsOn": [
+							{
+								"activity": "Wait1",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"url": " https://sleepyhead.unicommerce.com/services/rest/v1/export/job/status",
+							"method": "POST",
+							"headers": {
+								"Authorization": {
+									"value": "Bearer @{activity('Get Token').output.access_token}",
+									"type": "Expression"
+								}
+							},
+							"body": {
+								"value": "{\n    \"jobCode\": \"@{activity('Get Job Code').output.jobCode}\"\n}",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "Copy data IN-OUT",
+						"type": "Copy",
+						"dependsOn": [
+							{
+								"activity": "Copy ADLSGen2-Synapse",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "DelimitedTextSource",
+								"storeSettings": {
+									"type": "AzureBlobFSReadSettings",
+									"recursive": true,
+									"wildcardFolderPath": "AllFacilitiesSalesReport/IN",
+									"wildcardFileName": "*.csv",
+									"enablePartitionDiscovery": false
+								},
+								"formatSettings": {
+									"type": "DelimitedTextReadSettings"
+								}
+							},
+							"sink": {
+								"type": "DelimitedTextSink",
+								"storeSettings": {
+									"type": "AzureBlobFSWriteSettings"
+								},
+								"formatSettings": {
+									"type": "DelimitedTextWriteSettings",
+									"quoteAllText": true,
+									"fileExtension": ".txt"
+								}
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"typeConversion": true,
+								"typeConversionSettings": {
+									"allowDataTruncation": true,
+									"treatBooleanAsNumber": false
+								}
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "DS_Unicomm_Copy_CSV",
+								"type": "DatasetReference"
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "DS_Unicomm_Copy_OUT",
+								"type": "DatasetReference"
+							}
+						]
+					},
+					{
+						"name": "Delete-IN",
+						"type": "Delete",
+						"dependsOn": [
+							{
+								"activity": "Copy data IN-OUT",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"dataset": {
+								"referenceName": "DS_Unicomm_SalesOrderReport_Delete_IN",
+								"type": "DatasetReference"
+							},
+							"enableLogging": false,
+							"storeSettings": {
+								"type": "AzureBlobFSReadSettings",
+								"recursive": true,
+								"wildcardFileName": "*.csv",
+								"enablePartitionDiscovery": false
+							}
+						}
+					}
+				],
+				"parameters": {
+					"param_epoch": {
+						"type": "string",
+						"defaultValue": "1970-01-01T00:00:00Z"
+					}
+				},
+				"variables": {
+					"StartDate": {
+						"type": "String"
+					},
+					"EndDate": {
+						"type": "String"
+					},
+					"EPOCH_EndDate": {
+						"type": "String"
+					},
+					"StartDate-EPOCH": {
+						"type": "String"
+					},
+					"MyURL": {
+						"type": "String"
+					}
+				},
+				"folder": {
+					"name": "Unicomm-REST API"
+				},
+				"annotations": [],
+				"lastPublishTime": "2022-12-08T13:08:25Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/DS_Unicomm_SalesOrderReport')]",
+				"[concat(variables('factoryId'), '/datasets/DS_Unicomm_Sales_Order_Report')]",
+				"[concat(variables('factoryId'), '/datasets/DS_Unicomm_Copy_CSV')]",
+				"[concat(variables('factoryId'), '/datasets/LS_Unicomm_SalesOrderReport')]",
+				"[concat(variables('factoryId'), '/datasets/DS_Unicomm_Copy_OUT')]",
+				"[concat(variables('factoryId'), '/datasets/DS_Unicomm_SalesOrderReport_Delete_IN')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_Unicomm_SalesOrderReport')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_Unicomm_SalesOrderReport')]",
+					"type": "LinkedServiceReference",
+					"parameters": {
+						"CSVBaseURL": {
+							"value": "@dataset().BaseURL",
+							"type": "Expression"
+						}
+					}
+				},
+				"parameters": {
+					"BaseURL": {
+						"type": "String",
+						"defaultValue": "https://unicommerce-export.s3.amazonaws.com/"
+					}
+				},
+				"annotations": [],
+				"type": "DelimitedText",
+				"typeProperties": {
+					"location": {
+						"type": "HttpServerLocation"
+					},
+					"columnDelimiter": ",",
+					"escapeChar": "\\",
+					"firstRowAsHeader": false,
+					"quoteChar": "\""
+				},
+				"schema": []
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_Unicomm_Sales_Order_Report')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_ADLSG2_DFXGP_EDW01_STG')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "DelimitedText",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"folderPath": "AllFacilitiesSalesReport/IN",
+						"fileSystem": "fs-ci-dfxgp-unicomm"
+					},
+					"columnDelimiter": ",",
+					"escapeChar": "\\",
+					"quoteChar": "\""
+				},
+				"schema": []
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_Unicomm_Copy_CSV')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_ADLSG2_DFXGP_EDW01_STG')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "DelimitedText",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"fileName": "Export-All facility sale order export-sleepyhead_08122022104959.csv",
+						"folderPath": "AllFacilitiesSalesReport/IN",
+						"fileSystem": "fs-ci-dfxgp-unicomm"
+					},
+					"columnDelimiter": ",",
+					"escapeChar": "\"",
+					"firstRowAsHeader": true,
+					"quoteChar": "\""
+				},
+				"schema": [
+					{
+						"name": "Sale Order Item Code",
+						"type": "String"
+					},
+					{
+						"name": "Display Order Code",
+						"type": "String"
+					},
+					{
+						"name": "Reverse Pickup Code",
+						"type": "String"
+					},
+					{
+						"name": "Reverse Pickup Created Date",
+						"type": "String"
+					},
+					{
+						"name": "Reverse Pickup Reason",
+						"type": "String"
+					},
+					{
+						"name": "Notification Email",
+						"type": "String"
+					},
+					{
+						"name": "Notification Mobile",
+						"type": "String"
+					},
+					{
+						"name": "Require Customization",
+						"type": "String"
+					},
+					{
+						"name": "COD",
+						"type": "String"
+					},
+					{
+						"name": "Shipping Address Id",
+						"type": "String"
+					},
+					{
+						"name": "Category",
+						"type": "String"
+					},
+					{
+						"name": "Invoice Code",
+						"type": "String"
+					},
+					{
+						"name": "Invoice Created",
+						"type": "String"
+					},
+					{
+						"name": "EWayBill No",
+						"type": "String"
+					},
+					{
+						"name": "EWayBill Date",
+						"type": "String"
+					},
+					{
+						"name": "EWayBill Valid Till",
+						"type": "String"
+					},
+					{
+						"name": "Shipping Address Name",
+						"type": "String"
+					},
+					{
+						"name": "Shipping Address Line 1",
+						"type": "String"
+					},
+					{
+						"name": "Shipping Address Line 2",
+						"type": "String"
+					},
+					{
+						"name": "Shipping Address City",
+						"type": "String"
+					},
+					{
+						"name": "Shipping Address State",
+						"type": "String"
+					},
+					{
+						"name": "Shipping Address Country",
+						"type": "String"
+					},
+					{
+						"name": "Shipping Address Pincode",
+						"type": "String"
+					},
+					{
+						"name": "Shipping Address Phone",
+						"type": "String"
+					},
+					{
+						"name": "Billing Address Id",
+						"type": "String"
+					},
+					{
+						"name": "Billing Address Name",
+						"type": "String"
+					},
+					{
+						"name": "Billing Address Line 1",
+						"type": "String"
+					},
+					{
+						"name": "Billing Address Line 2",
+						"type": "String"
+					},
+					{
+						"name": "Billing Address City",
+						"type": "String"
+					},
+					{
+						"name": "Billing Address State",
+						"type": "String"
+					},
+					{
+						"name": "Billing Address Country",
+						"type": "String"
+					},
+					{
+						"name": "Billing Address Pincode",
+						"type": "String"
+					},
+					{
+						"name": "Billing Address Phone",
+						"type": "String"
+					},
+					{
+						"name": "Shipping Method",
+						"type": "String"
+					},
+					{
+						"name": "Item SKU Code",
+						"type": "String"
+					},
+					{
+						"name": "Channel Product Id",
+						"type": "String"
+					},
+					{
+						"name": "Item Type Name",
+						"type": "String"
+					},
+					{
+						"name": "Item Type Color",
+						"type": "String"
+					},
+					{
+						"name": "Item Type Size",
+						"type": "String"
+					},
+					{
+						"name": "Item Type Brand",
+						"type": "String"
+					},
+					{
+						"name": "Channel Name",
+						"type": "String"
+					},
+					{
+						"name": "SKU Require Customization",
+						"type": "String"
+					},
+					{
+						"name": "Gift Wrap",
+						"type": "String"
+					},
+					{
+						"name": "Gift Message",
+						"type": "String"
+					},
+					{
+						"name": "HSN Code",
+						"type": "String"
+					},
+					{
+						"name": "MRP",
+						"type": "String"
+					},
+					{
+						"name": "Total Price",
+						"type": "String"
+					},
+					{
+						"name": "Selling Price",
+						"type": "String"
+					},
+					{
+						"name": "Cost Price",
+						"type": "String"
+					},
+					{
+						"name": "Prepaid Amount",
+						"type": "String"
+					},
+					{
+						"name": "Subtotal",
+						"type": "String"
+					},
+					{
+						"name": "Discount",
+						"type": "String"
+					},
+					{
+						"name": "GST Tax Type Code",
+						"type": "String"
+					},
+					{
+						"name": "CGST",
+						"type": "String"
+					},
+					{
+						"name": "IGST",
+						"type": "String"
+					},
+					{
+						"name": "SGST",
+						"type": "String"
+					},
+					{
+						"name": "UTGST",
+						"type": "String"
+					},
+					{
+						"name": "CESS",
+						"type": "String"
+					},
+					{
+						"name": "CGST Rate",
+						"type": "String"
+					},
+					{
+						"name": "IGST Rate",
+						"type": "String"
+					},
+					{
+						"name": "SGST Rate",
+						"type": "String"
+					},
+					{
+						"name": "UTGST Rate",
+						"type": "String"
+					},
+					{
+						"name": "CESS Rate",
+						"type": "String"
+					},
+					{
+						"name": "TCS Amount",
+						"type": "String"
+					},
+					{
+						"name": "Tax %",
+						"type": "String"
+					},
+					{
+						"name": "Tax Value",
+						"type": "String"
+					},
+					{
+						"name": "Voucher Code",
+						"type": "String"
+					},
+					{
+						"name": "Shipping Charges",
+						"type": "String"
+					},
+					{
+						"name": "Shipping Method Charges",
+						"type": "String"
+					},
+					{
+						"name": "COD Service Charges",
+						"type": "String"
+					},
+					{
+						"name": "Gift Wrap Charges",
+						"type": "String"
+					},
+					{
+						"name": "Packet Number",
+						"type": "String"
+					},
+					{
+						"name": "Order Date as dd/mm/yyyy hh:MM:ss",
+						"type": "String"
+					},
+					{
+						"name": "Sale Order Code",
+						"type": "String"
+					},
+					{
+						"name": "On Hold",
+						"type": "String"
+					},
+					{
+						"name": "Sale Order Status",
+						"type": "String"
+					},
+					{
+						"name": "Priority",
+						"type": "String"
+					},
+					{
+						"name": "Currency",
+						"type": "String"
+					},
+					{
+						"name": "Currency Conversion Rate",
+						"type": "String"
+					},
+					{
+						"name": "Sale Order Item Status",
+						"type": "String"
+					},
+					{
+						"name": "Cancellation Reason",
+						"type": "String"
+					},
+					{
+						"name": "Shipping provider",
+						"type": "String"
+					},
+					{
+						"name": "Shipping Courier",
+						"type": "String"
+					},
+					{
+						"name": "Channel Shipping",
+						"type": "String"
+					},
+					{
+						"name": "Shipping Arranged By",
+						"type": "String"
+					},
+					{
+						"name": "Shipping Package Code",
+						"type": "String"
+					},
+					{
+						"name": "Shipping Package Creation Date",
+						"type": "String"
+					},
+					{
+						"name": "Shipping Package Status Code",
+						"type": "String"
+					},
+					{
+						"name": "Shipping Package Type",
+						"type": "String"
+					},
+					{
+						"name": "Length(mm)",
+						"type": "String"
+					},
+					{
+						"name": "Width(mm)",
+						"type": "String"
+					},
+					{
+						"name": "Height(mm)",
+						"type": "String"
+					},
+					{
+						"name": "Delivery Time",
+						"type": "String"
+					},
+					{
+						"name": "Tracking Number",
+						"type": "String"
+					},
+					{
+						"name": "Dispatch Date",
+						"type": "String"
+					},
+					{
+						"name": "Facility",
+						"type": "String"
+					},
+					{
+						"name": "Return Date",
+						"type": "String"
+					},
+					{
+						"name": "Return Reason",
+						"type": "String"
+					},
+					{
+						"name": "Created",
+						"type": "String"
+					},
+					{
+						"name": "Updated",
+						"type": "String"
+					},
+					{
+						"name": "Combination Identifier",
+						"type": "String"
+					},
+					{
+						"name": "Combination Description",
+						"type": "String"
+					},
+					{
+						"name": "Transfer Price",
+						"type": "String"
+					},
+					{
+						"name": "Item Code",
+						"type": "String"
+					},
+					{
+						"name": "Item Details",
+						"type": "String"
+					},
+					{
+						"name": "IMEI",
+						"type": "String"
+					},
+					{
+						"name": "Weight",
+						"type": "String"
+					},
+					{
+						"name": "GSTIN",
+						"type": "String"
+					},
+					{
+						"name": "Customer GSTIN",
+						"type": "String"
+					},
+					{
+						"name": "TIN",
+						"type": "String"
+					},
+					{
+						"name": "Payment Instrument",
+						"type": "String"
+					},
+					{
+						"name": "Fulfillment TAT",
+						"type": "String"
+					}
+				]
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/LS_Unicomm_SalesOrderReport')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_AzSynapse_DFXGP_EDW01')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "AzureSqlDWTable",
+				"schema": [
+					{
+						"name": "Sale Order Item Code",
+						"type": "varchar"
+					},
+					{
+						"name": "Display Order Code",
+						"type": "varchar"
+					},
+					{
+						"name": "Reverse Pickup Code",
+						"type": "varchar"
+					},
+					{
+						"name": "Reverse Pickup Created Date",
+						"type": "varchar"
+					},
+					{
+						"name": "Reverse Pickup Reason",
+						"type": "varchar"
+					},
+					{
+						"name": "Notification Email",
+						"type": "varchar"
+					},
+					{
+						"name": "Notification Mobile",
+						"type": "varchar"
+					},
+					{
+						"name": "Require Customization",
+						"type": "varchar"
+					},
+					{
+						"name": "COD",
+						"type": "varchar"
+					},
+					{
+						"name": "Shipping Address Id",
+						"type": "varchar"
+					},
+					{
+						"name": "Category",
+						"type": "varchar"
+					},
+					{
+						"name": "Invoice Code",
+						"type": "varchar"
+					},
+					{
+						"name": "Invoice Created",
+						"type": "varchar"
+					},
+					{
+						"name": "EWayBill No",
+						"type": "varchar"
+					},
+					{
+						"name": "EWayBill Date",
+						"type": "varchar"
+					},
+					{
+						"name": "EWayBill Valid Till",
+						"type": "varchar"
+					},
+					{
+						"name": "Shipping Address Name",
+						"type": "varchar"
+					},
+					{
+						"name": "Shipping Address Line 1",
+						"type": "varchar"
+					},
+					{
+						"name": "Shipping Address Line 2",
+						"type": "varchar"
+					},
+					{
+						"name": "Shipping Address City",
+						"type": "varchar"
+					},
+					{
+						"name": "Shipping Address State",
+						"type": "varchar"
+					},
+					{
+						"name": "Shipping Address Country",
+						"type": "varchar"
+					},
+					{
+						"name": "Shipping Address Pincode",
+						"type": "varchar"
+					},
+					{
+						"name": "Shipping Address Phone",
+						"type": "varchar"
+					},
+					{
+						"name": "Billing Address Id",
+						"type": "varchar"
+					},
+					{
+						"name": "Billing Address Name",
+						"type": "varchar"
+					},
+					{
+						"name": "Billing Address Line 1",
+						"type": "varchar"
+					},
+					{
+						"name": "Billing Address Line 2",
+						"type": "varchar"
+					},
+					{
+						"name": "Billing Address City",
+						"type": "varchar"
+					},
+					{
+						"name": "Billing Address State",
+						"type": "varchar"
+					},
+					{
+						"name": "Billing Address Country",
+						"type": "varchar"
+					},
+					{
+						"name": "Billing Address Pincode",
+						"type": "varchar"
+					},
+					{
+						"name": "Billing Address Phone",
+						"type": "varchar"
+					},
+					{
+						"name": "Shipping Method",
+						"type": "varchar"
+					},
+					{
+						"name": "Item SKU Code",
+						"type": "varchar"
+					},
+					{
+						"name": "Channel Product Id",
+						"type": "varchar"
+					},
+					{
+						"name": "Item Type Name",
+						"type": "varchar"
+					},
+					{
+						"name": "Item Type Color",
+						"type": "varchar"
+					},
+					{
+						"name": "Item Type Size",
+						"type": "varchar"
+					},
+					{
+						"name": "Item Type Brand",
+						"type": "varchar"
+					},
+					{
+						"name": "Channel Name",
+						"type": "varchar"
+					},
+					{
+						"name": "SKU Require Customization",
+						"type": "varchar"
+					},
+					{
+						"name": "Gift Wrap",
+						"type": "varchar"
+					},
+					{
+						"name": "Gift Message",
+						"type": "varchar"
+					},
+					{
+						"name": "HSN Code",
+						"type": "varchar"
+					},
+					{
+						"name": "MRP",
+						"type": "varchar"
+					},
+					{
+						"name": "Total Price",
+						"type": "varchar"
+					},
+					{
+						"name": "Selling Price",
+						"type": "varchar"
+					},
+					{
+						"name": "Cost Price",
+						"type": "varchar"
+					},
+					{
+						"name": "Prepaid Amount",
+						"type": "varchar"
+					},
+					{
+						"name": "Subtotal",
+						"type": "varchar"
+					},
+					{
+						"name": "Discount",
+						"type": "varchar"
+					},
+					{
+						"name": "GST Tax Type Code",
+						"type": "varchar"
+					},
+					{
+						"name": "CGST",
+						"type": "varchar"
+					},
+					{
+						"name": "IGST",
+						"type": "varchar"
+					},
+					{
+						"name": "SGST",
+						"type": "varchar"
+					},
+					{
+						"name": "UTGST",
+						"type": "varchar"
+					},
+					{
+						"name": "CESS",
+						"type": "varchar"
+					},
+					{
+						"name": "CGST Rate",
+						"type": "varchar"
+					},
+					{
+						"name": "IGST Rate",
+						"type": "varchar"
+					},
+					{
+						"name": "SGST Rate",
+						"type": "varchar"
+					},
+					{
+						"name": "UTGST Rate",
+						"type": "varchar"
+					},
+					{
+						"name": "CESS Rate",
+						"type": "varchar"
+					},
+					{
+						"name": "TCS Amount",
+						"type": "varchar"
+					},
+					{
+						"name": "Tax %",
+						"type": "varchar"
+					},
+					{
+						"name": "Tax Value",
+						"type": "varchar"
+					},
+					{
+						"name": "Voucher Code",
+						"type": "varchar"
+					},
+					{
+						"name": "Shipping Charges",
+						"type": "varchar"
+					},
+					{
+						"name": "Shipping Method Charges",
+						"type": "varchar"
+					},
+					{
+						"name": "COD Service Charges",
+						"type": "varchar"
+					},
+					{
+						"name": "Gift Wrap Charges",
+						"type": "varchar"
+					},
+					{
+						"name": "Packet Number",
+						"type": "varchar"
+					},
+					{
+						"name": "Order Date as dd/mm/yyyy hh:MM:ss",
+						"type": "varchar"
+					},
+					{
+						"name": "Sale Order Code",
+						"type": "varchar"
+					},
+					{
+						"name": "On Hold",
+						"type": "varchar"
+					},
+					{
+						"name": "Sale Order Status",
+						"type": "varchar"
+					},
+					{
+						"name": "Priority",
+						"type": "varchar"
+					},
+					{
+						"name": "Currency",
+						"type": "varchar"
+					},
+					{
+						"name": "Currency Conversion Rate",
+						"type": "varchar"
+					},
+					{
+						"name": "Sale Order Item Status",
+						"type": "varchar"
+					},
+					{
+						"name": "Cancellation Reason",
+						"type": "varchar"
+					},
+					{
+						"name": "Shipping provider",
+						"type": "varchar"
+					},
+					{
+						"name": "Shipping Courier",
+						"type": "varchar"
+					},
+					{
+						"name": "Channel Shipping",
+						"type": "varchar"
+					},
+					{
+						"name": "Shipping Arranged By",
+						"type": "varchar"
+					},
+					{
+						"name": "Shipping Package Code",
+						"type": "varchar"
+					},
+					{
+						"name": "Shipping Package Creation Date",
+						"type": "varchar"
+					},
+					{
+						"name": "Shipping Package Status Code",
+						"type": "varchar"
+					},
+					{
+						"name": "Shipping Package Type",
+						"type": "varchar"
+					},
+					{
+						"name": "Length(mm)",
+						"type": "varchar"
+					},
+					{
+						"name": "Width(mm)",
+						"type": "varchar"
+					},
+					{
+						"name": "Height(mm)",
+						"type": "varchar"
+					},
+					{
+						"name": "Delivery Time",
+						"type": "varchar"
+					},
+					{
+						"name": "Tracking Number",
+						"type": "varchar"
+					},
+					{
+						"name": "Dispatch Date",
+						"type": "varchar"
+					},
+					{
+						"name": "Facility",
+						"type": "varchar"
+					},
+					{
+						"name": "Return Date",
+						"type": "varchar"
+					},
+					{
+						"name": "Return Reason",
+						"type": "varchar"
+					},
+					{
+						"name": "Created",
+						"type": "varchar"
+					},
+					{
+						"name": "Updated",
+						"type": "varchar"
+					},
+					{
+						"name": "Combination Identifier",
+						"type": "varchar"
+					},
+					{
+						"name": "Combination Description",
+						"type": "varchar"
+					},
+					{
+						"name": "Transfer Price",
+						"type": "varchar"
+					},
+					{
+						"name": "Item Code",
+						"type": "varchar"
+					},
+					{
+						"name": "Item Details",
+						"type": "varchar"
+					},
+					{
+						"name": "IMEI",
+						"type": "varchar"
+					},
+					{
+						"name": "Weight",
+						"type": "varchar"
+					},
+					{
+						"name": "GSTIN",
+						"type": "varchar"
+					},
+					{
+						"name": "Customer GSTIN",
+						"type": "varchar"
+					},
+					{
+						"name": "TIN",
+						"type": "varchar"
+					},
+					{
+						"name": "Payment Instrument",
+						"type": "varchar"
+					},
+					{
+						"name": "Fulfillment TAT",
+						"type": "varchar"
+					}
+				],
+				"typeProperties": {
+					"schema": "STG_Duroflex_BI",
+					"table": "STG_UniCommerceData"
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_Unicomm_Copy_OUT')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_ADLSG2_DFXGP_EDW01_STG')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "DelimitedText",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"folderPath": "AllFacilitiesSalesReport/OUT",
+						"fileSystem": "fs-ci-dfxgp-unicomm"
+					},
+					"columnDelimiter": ",",
+					"escapeChar": "\\",
+					"quoteChar": "\""
+				},
+				"schema": [
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					}
+				]
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_Unicomm_SalesOrderReport_Delete_IN')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_ADLSG2_DFXGP_EDW01_STG')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "Binary",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"folderPath": "AllFacilitiesSalesReport/IN",
+						"fileSystem": "fs-ci-dfxgp-unicomm"
+					}
+				}
+			},
+			"dependsOn": []
+		}
+	]
+}
