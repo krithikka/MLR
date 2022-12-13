@@ -1,0 +1,1985 @@
+{
+	"$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"factoryName": {
+			"type": "string",
+			"metadata": "Data Factory name"
+		},
+		"LS_ADLSG2_DFXGP_EDW01_STG": {
+			"type": "string"
+		},
+		"LS_VIN_InBoundDetail": {
+			"type": "string"
+		},
+		"LS_AzSynapse_DFXGP_EDW01": {
+			"type": "string"
+		}
+	},
+	"variables": {
+		"factoryId": "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]"
+	},
+	"resources": [
+		{
+			"name": "[concat(parameters('factoryName'), '/pip_vinculum_InBoundDetail')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Web1",
+						"type": "WebActivity",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"url": "https://duroflex.vineretail.com/RestWS/api/eretail/v3/inbound/detail",
+							"method": "POST",
+							"headers": {
+								"accept": "application/json",
+								"ApiOwner": "Shrijit",
+								"ApiKey": " 754b261806fe43339313c224ab7603a87b9a5f0d518548de9d3de29",
+								"Content-Type": "application/json"
+							},
+							"body": {
+								"value": "{\n    \"poCode\":\"\",\n    \"asnCode\":\"\",\n    \"delloc\":\"GGN\",\n    \"fromDate\":\"10/10/2022 00:00:00\",\n    \"toDate\":\"17/10/2022 00:00:00\",\n    \"vendor_code\":\"\",\n    \"pageNumber\":\"1\",\n    \"filterBy\":\"1\"\n }",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "Copy IN as JSON",
+						"type": "Copy",
+						"dependsOn": [
+							{
+								"activity": "Web1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "RestSource",
+								"httpRequestTimeout": "00:01:40",
+								"requestInterval": "00.00:00:00.010",
+								"requestMethod": "POST",
+								"requestBody": {
+									"value": "{\r\n    \"poCode\":\"\",\r\n    \"asnCode\":\"\",\r\n    \"delloc\":\"GGN\",\r\n    \"fromDate\":\"10/10/2022 00:00:00\",\r\n    \"toDate\":\"17/10/2022 00:00:00\",\r\n    \"vendor_code\":\"\",\r\n    \"pageNumber\":\"1\",\r\n    \"filterBy\":\"1\"\r\n }",
+									"type": "Expression"
+								},
+								"additionalHeaders": {
+									"accept": "application/json",
+									"Content-Type": "application/json",
+									"ApiOwner": "Shrijit",
+									"ApiKey": "754b261806fe43339313c224ab7603a87b9a5f0d518548de9d3de29"
+								},
+								"paginationRules": {
+									"supportRFC5988": "true"
+								}
+							},
+							"sink": {
+								"type": "JsonSink",
+								"storeSettings": {
+									"type": "AzureBlobFSWriteSettings"
+								},
+								"formatSettings": {
+									"type": "JsonWriteSettings"
+								}
+							},
+							"enableStaging": false
+						},
+						"inputs": [
+							{
+								"referenceName": "DS_REST_Vin_InBoundDetail",
+								"type": "DatasetReference"
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "DS_JSON_Vin_InBoundDetail",
+								"type": "DatasetReference"
+							}
+						]
+					},
+					{
+						"name": "Copy ADLSGEN 2",
+						"type": "Copy",
+						"dependsOn": [
+							{
+								"activity": "Copy IN as JSON",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "JsonSource",
+								"storeSettings": {
+									"type": "AzureBlobFSReadSettings",
+									"recursive": true,
+									"wildcardFolderPath": "Vin_InBoundDetail/IN",
+									"wildcardFileName": "*.json",
+									"enablePartitionDiscovery": false
+								},
+								"formatSettings": {
+									"type": "JsonReadSettings"
+								}
+							},
+							"sink": {
+								"type": "SqlDWSink",
+								"allowCopyCommand": true
+							},
+							"enableStaging": true,
+							"stagingSettings": {
+								"linkedServiceName": {
+									"referenceName": "[parameters('LS_ADLSG2_DFXGP_EDW01_STG')]",
+									"type": "LinkedServiceReference"
+								},
+								"path": "staging-inbounddetail"
+							},
+							"translator": {
+								"type": "TabularTranslator",
+								"mappings": [
+									{
+										"source": {
+											"path": "[['pocode']"
+										},
+										"sink": {
+											"name": "pocode",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['ext_pocode']"
+										},
+										"sink": {
+											"name": "ext_pocode",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['asncode']"
+										},
+										"sink": {
+											"name": "asncode",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['inboundcode']"
+										},
+										"sink": {
+											"name": "inboundcode",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['externinboundcode']"
+										},
+										"sink": {
+											"name": "externinboundcode",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['grnno']"
+										},
+										"sink": {
+											"name": "grnno",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['vendor_code']"
+										},
+										"sink": {
+											"name": "vendor_code",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['vendor_name']"
+										},
+										"sink": {
+											"name": "vendor_name",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['status']"
+										},
+										"sink": {
+											"name": "status",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['pocreated_loc']"
+										},
+										"sink": {
+											"name": "pocreated_loc",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['del_loc']"
+										},
+										"sink": {
+											"name": "del_loc",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['del_locname']"
+										},
+										"sink": {
+											"name": "del_locname",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['asn_delloc']"
+										},
+										"sink": {
+											"name": "asn_delloc",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['invoiceno']"
+										},
+										"sink": {
+											"name": "invoiceno",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['invoicedate']"
+										},
+										"sink": {
+											"name": "invoicedate",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['invoice_amt']"
+										},
+										"sink": {
+											"name": "invoice_amt",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['invoicetax']"
+										},
+										"sink": {
+											"name": "invoicetax",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['no_ofboxes']"
+										},
+										"sink": {
+											"name": "no_ofboxes",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['vehicleno']"
+										},
+										"sink": {
+											"name": "vehicleno",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['challan_no']"
+										},
+										"sink": {
+											"name": "challan_no",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['challan_date']"
+										},
+										"sink": {
+											"name": "challan_date",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['remarks']"
+										},
+										"sink": {
+											"name": "remarks",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['weight']"
+										},
+										"sink": {
+											"name": "weight",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['material_rcvddate']"
+										},
+										"sink": {
+											"name": "material_rcvddate",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['udf1']"
+										},
+										"sink": {
+											"name": "udf1",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['udf2']"
+										},
+										"sink": {
+											"name": "udf2",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['udf3']"
+										},
+										"sink": {
+											"name": "udf3",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['udf4']"
+										},
+										"sink": {
+											"name": "udf4",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['udf5']"
+										},
+										"sink": {
+											"name": "udf5",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['udf6']"
+										},
+										"sink": {
+											"name": "udf6",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['udf7']"
+										},
+										"sink": {
+											"name": "udf7",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['udf8']"
+										},
+										"sink": {
+											"name": "udf8",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['udf9']"
+										},
+										"sink": {
+											"name": "udf9",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['udf10']"
+										},
+										"sink": {
+											"name": "udf10",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['currency']"
+										},
+										"sink": {
+											"name": "currency",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['inbType']"
+										},
+										"sink": {
+											"name": "inbType",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['grnDate']"
+										},
+										"sink": {
+											"name": "grnDate",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['gatepasscode']"
+										},
+										"sink": {
+											"name": "gatepasscode",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['grn_qty']"
+										},
+										"sink": {
+											"name": "grn_qty",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['grn_amount']"
+										},
+										"sink": {
+											"name": "grn_amount",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['grn_BaseCurrAmount']"
+										},
+										"sink": {
+											"name": "grn_BaseCurrAmount",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['conversionRate']"
+										},
+										"sink": {
+											"name": "conversionRate",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['returnCode']"
+										},
+										"sink": {
+											"name": "returnCode",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['printUrl']"
+										},
+										"sink": {
+											"name": "printUrl",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['lineno']"
+										},
+										"sink": {
+											"name": "lineno",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['ext_lineno']"
+										},
+										"sink": {
+											"name": "ext_lineno",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['po_ext_lineno']"
+										},
+										"sink": {
+											"name": "po_ext_lineno",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['asn_lineno']"
+										},
+										"sink": {
+											"name": "asn_lineno",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['status']"
+										},
+										"sink": {
+											"name": "status_item",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['sku']"
+										},
+										"sink": {
+											"name": "sku",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['receivedqty']"
+										},
+										"sink": {
+											"name": "receivedqty",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['bin']"
+										},
+										"sink": {
+											"name": "bin",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['cost']"
+										},
+										"sink": {
+											"name": "cost",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['currBaseCost']"
+										},
+										"sink": {
+											"name": "currBaseCost",
+											"type": "Single"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['lottable01']"
+										},
+										"sink": {
+											"name": "lottable_01",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['lottable02']"
+										},
+										"sink": {
+											"name": "lottable_02",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['lottable03']"
+										},
+										"sink": {
+											"name": "lottable_03",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['lottable04']"
+										},
+										"sink": {
+											"name": "lottable_04",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['lottable05']"
+										},
+										"sink": {
+											"name": "lottable_05",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['lottable06']"
+										},
+										"sink": {
+											"name": "lottable_06",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['lottable07']"
+										},
+										"sink": {
+											"name": "lottable_07",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['polineno']"
+										},
+										"sink": {
+											"name": "polineno",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['serialNo1'][0]"
+										},
+										"sink": {
+											"name": "serialNo1",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['serialNo2'][0]"
+										},
+										"sink": {
+											"name": "serialNo2",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['serialNo3'][0]"
+										},
+										"sink": {
+											"name": "serialNo3",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['udf1']"
+										},
+										"sink": {
+											"name": "udf1_1",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['udf2']"
+										},
+										"sink": {
+											"name": "udf2_2",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['udf3']"
+										},
+										"sink": {
+											"name": "udf3_3",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['udf4']"
+										},
+										"sink": {
+											"name": "udf4_4",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['udf5']"
+										},
+										"sink": {
+											"name": "udf5_5",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['udf6']"
+										},
+										"sink": {
+											"name": "udf6_6",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['udf7']"
+										},
+										"sink": {
+											"name": "udf7_7",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['udf8']"
+										},
+										"sink": {
+											"name": "udf8_8",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['udf9']"
+										},
+										"sink": {
+											"name": "udf9_9",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['udf10']"
+										},
+										"sink": {
+											"name": "udf10_10",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['gstRt']"
+										},
+										"sink": {
+											"name": "gstRt",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['igstAmt']"
+										},
+										"sink": {
+											"name": "igstAmt",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['cgstAmt']"
+										},
+										"sink": {
+											"name": "cgstAmt",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['sgstAmt']"
+										},
+										"sink": {
+											"name": "sgstAmt",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['cesRt']"
+										},
+										"sink": {
+											"name": "cesRt",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['cesAmt']"
+										},
+										"sink": {
+											"name": "cesAmt",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['cesNonAdvlAmt']"
+										},
+										"sink": {
+											"name": "cesNonAdvlAmt",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['stateCesRt']"
+										},
+										"sink": {
+											"name": "stateCesRt",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['stateCesAmt']"
+										},
+										"sink": {
+											"name": "stateCesAmt",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['stateCesNonAdvlAmt']"
+										},
+										"sink": {
+											"name": "stateCesNonAdvlAmt",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['hsnCode']"
+										},
+										"sink": {
+											"name": "hsnCode",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['igstRt']"
+										},
+										"sink": {
+											"name": "igstRt",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['cgstRt']"
+										},
+										"sink": {
+											"name": "cgstRt",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['sgstRt']"
+										},
+										"sink": {
+											"name": "sgstRt",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['ugstRt']"
+										},
+										"sink": {
+											"name": "ugstRt",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['ugstAmt']"
+										},
+										"sink": {
+											"name": "ugstAmt",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['skuUSNs'][0]"
+										},
+										"sink": {
+											"name": "skuUSNs",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['vendorskucode']"
+										},
+										"sink": {
+											"name": "vendorskucode",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['size']"
+										},
+										"sink": {
+											"name": "size",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "[['items'][0]['taxPercentage']"
+										},
+										"sink": {
+											"name": "taxPercentage",
+											"type": "String"
+										}
+									}
+								],
+								"collectionReference": "$['response']['inboundlist']"
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "DS_Vin_INBoundDetail",
+								"type": "DatasetReference"
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "LS_SINK_InBoundDetail",
+								"type": "DatasetReference"
+							}
+						]
+					},
+					{
+						"name": "Copy IN and OUT",
+						"type": "Copy",
+						"dependsOn": [
+							{
+								"activity": "Copy ADLSGEN 2",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "JsonSource",
+								"storeSettings": {
+									"type": "AzureBlobFSReadSettings",
+									"recursive": true,
+									"wildcardFolderPath": "Vin_InBoundDetail/IN",
+									"wildcardFileName": "*.json",
+									"enablePartitionDiscovery": false
+								},
+								"formatSettings": {
+									"type": "JsonReadSettings"
+								}
+							},
+							"sink": {
+								"type": "JsonSink",
+								"storeSettings": {
+									"type": "AzureBlobFSWriteSettings"
+								},
+								"formatSettings": {
+									"type": "JsonWriteSettings"
+								}
+							},
+							"enableStaging": false
+						},
+						"inputs": [
+							{
+								"referenceName": "DS_IN_Vin_InBoundDetail",
+								"type": "DatasetReference"
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "DS_OUT_Vin_InBoundDetail",
+								"type": "DatasetReference"
+							}
+						]
+					},
+					{
+						"name": "Delete1",
+						"type": "Delete",
+						"dependsOn": [
+							{
+								"activity": "Copy IN and OUT",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"dataset": {
+								"referenceName": "DS_IN_Vin_InBoundDetail",
+								"type": "DatasetReference"
+							},
+							"enableLogging": false,
+							"storeSettings": {
+								"type": "AzureBlobFSReadSettings",
+								"recursive": true,
+								"wildcardFileName": "*.json",
+								"enablePartitionDiscovery": false
+							}
+						}
+					}
+				],
+				"folder": {
+					"name": "Vinculum-REST API"
+				},
+				"annotations": [],
+				"lastPublishTime": "2022-12-12T12:40:04Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/DS_REST_Vin_InBoundDetail')]",
+				"[concat(variables('factoryId'), '/datasets/DS_JSON_Vin_InBoundDetail')]",
+				"[concat(variables('factoryId'), '/datasets/DS_Vin_INBoundDetail')]",
+				"[concat(variables('factoryId'), '/datasets/LS_SINK_InBoundDetail')]",
+				"[concat(variables('factoryId'), '/datasets/DS_IN_Vin_InBoundDetail')]",
+				"[concat(variables('factoryId'), '/datasets/DS_OUT_Vin_InBoundDetail')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_REST_Vin_InBoundDetail')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_VIN_InBoundDetail')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "RestResource",
+				"schema": []
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_JSON_Vin_InBoundDetail')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_ADLSG2_DFXGP_EDW01_STG')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "Json",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"folderPath": "Vin_InBoundDetail/IN",
+						"fileSystem": "fs-ci-dfxgp-vinculum"
+					}
+				},
+				"schema": {}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_Vin_INBoundDetail')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_ADLSG2_DFXGP_EDW01_STG')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "Json",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"fileName": "Inbounddetail.json",
+						"folderPath": "Vin_InBoundDetail/IN",
+						"fileSystem": "fs-ci-dfxgp-vinculum"
+					}
+				},
+				"schema": {
+					"type": "object",
+					"properties": {
+						"responseCode": {
+							"type": "integer"
+						},
+						"responseMessage": {
+							"type": "string"
+						},
+						"response": {
+							"type": "object",
+							"properties": {
+								"totalInbound": {
+									"type": "string"
+								},
+								"totalPages": {
+									"type": "string"
+								},
+								"currentPage": {
+									"type": "string"
+								},
+								"inboundlist": {
+									"type": "array",
+									"items": {
+										"type": "object",
+										"properties": {
+											"pocode": {
+												"type": "string"
+											},
+											"ext_pocode": {
+												"type": "string"
+											},
+											"asncode": {
+												"type": "string"
+											},
+											"inboundcode": {
+												"type": "string"
+											},
+											"externinboundcode": {
+												"type": "string"
+											},
+											"grnno": {
+												"type": "string"
+											},
+											"vendor_code": {
+												"type": "string"
+											},
+											"vendor_name": {
+												"type": "string"
+											},
+											"status": {
+												"type": "string"
+											},
+											"pocreated_loc": {
+												"type": "string"
+											},
+											"del_loc": {
+												"type": "string"
+											},
+											"del_locname": {
+												"type": "string"
+											},
+											"asn_delloc": {
+												"type": "string"
+											},
+											"invoiceno": {
+												"type": "string"
+											},
+											"invoicedate": {
+												"type": "string"
+											},
+											"invoice_amt": {
+												"type": "string"
+											},
+											"invoicetax": {
+												"type": "string"
+											},
+											"no_ofboxes": {
+												"type": "string"
+											},
+											"vehicleno": {
+												"type": "string"
+											},
+											"challan_no": {
+												"type": "string"
+											},
+											"challan_date": {
+												"type": "string"
+											},
+											"remarks": {
+												"type": "string"
+											},
+											"weight": {
+												"type": "string"
+											},
+											"material_rcvddate": {
+												"type": "string"
+											},
+											"udf1": {
+												"type": "string"
+											},
+											"udf2": {
+												"type": "string"
+											},
+											"udf3": {
+												"type": "string"
+											},
+											"udf4": {
+												"type": "string"
+											},
+											"udf5": {
+												"type": "string"
+											},
+											"udf6": {
+												"type": "string"
+											},
+											"udf7": {
+												"type": "string"
+											},
+											"udf8": {
+												"type": "string"
+											},
+											"udf9": {
+												"type": "string"
+											},
+											"udf10": {
+												"type": "string"
+											},
+											"currency": {
+												"type": "string"
+											},
+											"inbType": {
+												"type": "string"
+											},
+											"grnDate": {
+												"type": "string"
+											},
+											"gatepasscode": {
+												"type": "string"
+											},
+											"grn_qty": {
+												"type": "string"
+											},
+											"grn_amount": {
+												"type": "string"
+											},
+											"grn_BaseCurrAmount": {
+												"type": "string"
+											},
+											"conversionRate": {
+												"type": "string"
+											},
+											"returnCode": {
+												"type": "string"
+											},
+											"items": {
+												"type": "array",
+												"items": {
+													"type": "object",
+													"properties": {
+														"lineno": {
+															"type": "string"
+														},
+														"ext_lineno": {
+															"type": "string"
+														},
+														"po_ext_lineno": {
+															"type": "string"
+														},
+														"asn_lineno": {
+															"type": "string"
+														},
+														"status": {
+															"type": "string"
+														},
+														"sku": {
+															"type": "string"
+														},
+														"receivedqty": {
+															"type": "string"
+														},
+														"bin": {
+															"type": "string"
+														},
+														"cost": {
+															"type": "string"
+														},
+														"currBaseCost": {
+															"type": "string"
+														},
+														"lottable01": {
+															"type": "string"
+														},
+														"lottable02": {
+															"type": "string"
+														},
+														"lottable03": {
+															"type": "string"
+														},
+														"lottable04": {
+															"type": "string"
+														},
+														"lottable05": {
+															"type": "string"
+														},
+														"lottable06": {
+															"type": "string"
+														},
+														"lottable07": {
+															"type": "string"
+														},
+														"polineno": {
+															"type": "string"
+														},
+														"serialNo1": {
+															"type": "array",
+															"items": {
+																"type": "string"
+															}
+														},
+														"serialNo2": {
+															"type": "array",
+															"items": {
+																"type": "string"
+															}
+														},
+														"serialNo3": {
+															"type": "array",
+															"items": {
+																"type": "string"
+															}
+														},
+														"udf1": {
+															"type": "string"
+														},
+														"udf2": {
+															"type": "string"
+														},
+														"udf3": {
+															"type": "string"
+														},
+														"udf4": {
+															"type": "string"
+														},
+														"udf5": {
+															"type": "string"
+														},
+														"udf6": {
+															"type": "string"
+														},
+														"udf7": {
+															"type": "string"
+														},
+														"udf8": {
+															"type": "string"
+														},
+														"udf9": {
+															"type": "string"
+														},
+														"udf10": {
+															"type": "string"
+														},
+														"gstRt": {
+															"type": "string"
+														},
+														"igstAmt": {
+															"type": "string"
+														},
+														"cgstAmt": {
+															"type": "string"
+														},
+														"sgstAmt": {
+															"type": "string"
+														},
+														"cesRt": {
+															"type": "string"
+														},
+														"cesAmt": {
+															"type": "string"
+														},
+														"cesNonAdvlAmt": {
+															"type": "string"
+														},
+														"stateCesRt": {
+															"type": "string"
+														},
+														"stateCesAmt": {
+															"type": "string"
+														},
+														"stateCesNonAdvlAmt": {
+															"type": "string"
+														},
+														"hsnCode": {
+															"type": "string"
+														},
+														"igstRt": {
+															"type": "string"
+														},
+														"cgstRt": {
+															"type": "string"
+														},
+														"sgstRt": {
+															"type": "string"
+														},
+														"ugstRt": {
+															"type": "string"
+														},
+														"ugstAmt": {
+															"type": "string"
+														},
+														"skuUSNs": {
+															"type": "array"
+														},
+														"vendorskucode": {
+															"type": "string"
+														},
+														"size": {
+															"type": "string"
+														},
+														"taxPercentage": {
+															"type": "string"
+														}
+													}
+												}
+											},
+											"printUrl": {
+												"type": "string"
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/LS_SINK_InBoundDetail')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_AzSynapse_DFXGP_EDW01')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "AzureSqlDWTable",
+				"schema": [
+					{
+						"name": "pocode",
+						"type": "varchar"
+					},
+					{
+						"name": "ext_pocode",
+						"type": "varchar"
+					},
+					{
+						"name": "asncode",
+						"type": "varchar"
+					},
+					{
+						"name": "inboundcode",
+						"type": "varchar"
+					},
+					{
+						"name": "externinboundcode",
+						"type": "varchar"
+					},
+					{
+						"name": "grnno",
+						"type": "varchar"
+					},
+					{
+						"name": "vendor_code",
+						"type": "varchar"
+					},
+					{
+						"name": "vendor_name",
+						"type": "nvarchar"
+					},
+					{
+						"name": "status",
+						"type": "nvarchar"
+					},
+					{
+						"name": "pocreated_loc",
+						"type": "varchar"
+					},
+					{
+						"name": "del_loc",
+						"type": "varchar"
+					},
+					{
+						"name": "del_locname",
+						"type": "varchar"
+					},
+					{
+						"name": "asn_delloc",
+						"type": "varchar"
+					},
+					{
+						"name": "invoiceno",
+						"type": "varchar"
+					},
+					{
+						"name": "invoicedate",
+						"type": "varchar"
+					},
+					{
+						"name": "invoice_amt",
+						"type": "varchar"
+					},
+					{
+						"name": "invoicetax",
+						"type": "varchar"
+					},
+					{
+						"name": "no_ofboxes",
+						"type": "varchar"
+					},
+					{
+						"name": "vehicleno",
+						"type": "varchar"
+					},
+					{
+						"name": "challan_no",
+						"type": "varchar"
+					},
+					{
+						"name": "challan_date",
+						"type": "varchar"
+					},
+					{
+						"name": "remarks",
+						"type": "varchar"
+					},
+					{
+						"name": "weight",
+						"type": "varchar"
+					},
+					{
+						"name": "material_rcvddate",
+						"type": "varchar"
+					},
+					{
+						"name": "udf1",
+						"type": "nvarchar"
+					},
+					{
+						"name": "udf2",
+						"type": "nvarchar"
+					},
+					{
+						"name": "udf3",
+						"type": "nvarchar"
+					},
+					{
+						"name": "udf4",
+						"type": "nvarchar"
+					},
+					{
+						"name": "udf5",
+						"type": "nvarchar"
+					},
+					{
+						"name": "udf6",
+						"type": "nvarchar"
+					},
+					{
+						"name": "udf7",
+						"type": "nvarchar"
+					},
+					{
+						"name": "udf8",
+						"type": "nvarchar"
+					},
+					{
+						"name": "udf9",
+						"type": "nvarchar"
+					},
+					{
+						"name": "udf10",
+						"type": "nvarchar"
+					},
+					{
+						"name": "currency",
+						"type": "nvarchar"
+					},
+					{
+						"name": "inbType",
+						"type": "nvarchar"
+					},
+					{
+						"name": "grnDate",
+						"type": "nvarchar"
+					},
+					{
+						"name": "gatepasscode",
+						"type": "nvarchar"
+					},
+					{
+						"name": "grn_qty",
+						"type": "nvarchar"
+					},
+					{
+						"name": "grn_amount",
+						"type": "nvarchar"
+					},
+					{
+						"name": "grn_BaseCurrAmount",
+						"type": "nvarchar"
+					},
+					{
+						"name": "conversionRate",
+						"type": "nvarchar"
+					},
+					{
+						"name": "returnCode",
+						"type": "nvarchar"
+					},
+					{
+						"name": "lineno",
+						"type": "nvarchar"
+					},
+					{
+						"name": "sku",
+						"type": "nvarchar"
+					},
+					{
+						"name": "ext_lineno",
+						"type": "nvarchar"
+					},
+					{
+						"name": "po_ext_lineno",
+						"type": "varchar"
+					},
+					{
+						"name": "asn_lineno",
+						"type": "varchar"
+					},
+					{
+						"name": "status_item",
+						"type": "varchar"
+					},
+					{
+						"name": "receivedqty",
+						"type": "varchar"
+					},
+					{
+						"name": "bin",
+						"type": "varchar"
+					},
+					{
+						"name": "cost",
+						"type": "varchar"
+					},
+					{
+						"name": "currBaseCost",
+						"type": "float",
+						"precision": 15
+					},
+					{
+						"name": "lottable_01",
+						"type": "varchar"
+					},
+					{
+						"name": "lottable_02",
+						"type": "varchar"
+					},
+					{
+						"name": "lottable_03",
+						"type": "varchar"
+					},
+					{
+						"name": "lottable_04",
+						"type": "varchar"
+					},
+					{
+						"name": "lottable_05",
+						"type": "varchar"
+					},
+					{
+						"name": "lottable_06",
+						"type": "varchar"
+					},
+					{
+						"name": "lottable_07",
+						"type": "varchar"
+					},
+					{
+						"name": "polineno",
+						"type": "varchar"
+					},
+					{
+						"name": "serialNo1",
+						"type": "nvarchar"
+					},
+					{
+						"name": "serialNo2",
+						"type": "nvarchar"
+					},
+					{
+						"name": "serialNo3",
+						"type": "nvarchar"
+					},
+					{
+						"name": "udf1_1",
+						"type": "nvarchar"
+					},
+					{
+						"name": "udf2_2",
+						"type": "nvarchar"
+					},
+					{
+						"name": "udf3_3",
+						"type": "nvarchar"
+					},
+					{
+						"name": "udf4_4",
+						"type": "nvarchar"
+					},
+					{
+						"name": "udf5_5",
+						"type": "nvarchar"
+					},
+					{
+						"name": "udf6_6",
+						"type": "nvarchar"
+					},
+					{
+						"name": "udf7_7",
+						"type": "nvarchar"
+					},
+					{
+						"name": "udf8_8",
+						"type": "nvarchar"
+					},
+					{
+						"name": "udf9_9",
+						"type": "nvarchar"
+					},
+					{
+						"name": "udf10_10",
+						"type": "nvarchar"
+					},
+					{
+						"name": "gstRt",
+						"type": "nvarchar"
+					},
+					{
+						"name": "igstAmt",
+						"type": "nvarchar"
+					},
+					{
+						"name": "cgstAmt",
+						"type": "nvarchar"
+					},
+					{
+						"name": "sgstAmt",
+						"type": "nvarchar"
+					},
+					{
+						"name": "cesRt",
+						"type": "nvarchar"
+					},
+					{
+						"name": "cesAmt",
+						"type": "nvarchar"
+					},
+					{
+						"name": "cesNonAdvlAmt",
+						"type": "nvarchar"
+					},
+					{
+						"name": "stateCesRt",
+						"type": "nvarchar"
+					},
+					{
+						"name": "stateCesAmt",
+						"type": "nvarchar"
+					},
+					{
+						"name": "stateCesNonAdvlAmt",
+						"type": "nvarchar"
+					},
+					{
+						"name": "hsnCode",
+						"type": "nvarchar"
+					},
+					{
+						"name": "igstRt",
+						"type": "varchar"
+					},
+					{
+						"name": "cgstRt",
+						"type": "varchar"
+					},
+					{
+						"name": "sgstRt",
+						"type": "varchar"
+					},
+					{
+						"name": "ugstRt",
+						"type": "varchar"
+					},
+					{
+						"name": "ugstAmt",
+						"type": "nvarchar"
+					},
+					{
+						"name": "skuUSNs",
+						"type": "varchar"
+					},
+					{
+						"name": "vendorskucode",
+						"type": "varchar"
+					},
+					{
+						"name": "size",
+						"type": "nvarchar"
+					},
+					{
+						"name": "taxPercentage",
+						"type": "nvarchar"
+					},
+					{
+						"name": "printUrl",
+						"type": "nvarchar"
+					}
+				],
+				"typeProperties": {
+					"schema": "STG_Duroflex_BI",
+					"table": "STG_Vin_InBoundDetail"
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_IN_Vin_InBoundDetail')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_ADLSG2_DFXGP_EDW01_STG')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "Json",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"folderPath": "Vin_InBoundDetail/IN",
+						"fileSystem": "fs-ci-dfxgp-vinculum"
+					}
+				},
+				"schema": {}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_OUT_Vin_InBoundDetail')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_ADLSG2_DFXGP_EDW01_STG')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "Json",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"folderPath": "Vin_InBoundDetail/OUT",
+						"fileSystem": "fs-ci-dfxgp-vinculum"
+					}
+				},
+				"schema": {}
+			},
+			"dependsOn": []
+		}
+	]
+}
