@@ -1,0 +1,2800 @@
+{
+	"$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"factoryName": {
+			"type": "string",
+			"metadata": "Data Factory name"
+		},
+		"LS_ADLSG2_DFXGP_EDW01_STG": {
+			"type": "string"
+		},
+		"LS_AzSynapse_DFXGP_EDW01": {
+			"type": "string"
+		},
+		"LS_REST_Vin_ShipmentDetail": {
+			"type": "string"
+		}
+	},
+	"variables": {
+		"factoryId": "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]"
+	},
+	"resources": [
+		{
+			"name": "[concat(parameters('factoryName'), '/pip_vinOrder_ShipmentDetail')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Web1",
+						"type": "WebActivity",
+						"dependsOn": [
+							{
+								"activity": "Set End Date",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"url": "https://duroflex.vineretail.com/RestWS/api/eretail/v1/order/shipmentDetail",
+							"method": "POST",
+							"headers": {
+								"Content-Type": {
+									"value": "application/json",
+									"type": "Expression"
+								},
+								"ApiOwner": "Shrijit",
+								"ApiKey": "754b261806fe43339313c224ab7603a87b9a5f0d518548de9d3de29"
+							},
+							"body": {
+								"value": "{\n   \"order_no\":[],\n   \"date_from\":\"15/10/2022 00:00:00\",\n   \"date_to\":\"21/10/2022 23:59:59\",\n   \"order_location\":\"\",\n   \"fulfillmentLocation\":\"\",\n   \"pageNumber\":\"1\",\n   \"filterBy\":\"1\"\n }",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "Web1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@range(1,activity('Web1').output.currentpage)",
+								"type": "Expression"
+							},
+							"isSequential": true,
+							"activities": [
+								{
+									"name": "Web2",
+									"type": "WebActivity",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"url": "https://duroflex.vineretail.com/RestWS/api/eretail/v1/order/shipmentDetail",
+										"method": "POST",
+										"headers": {
+											"Content-Type": "application/json",
+											"ApiKey": "754b261806fe43339313c224ab7603a87b9a5f0d518548de9d3de29",
+											"ApiOwner": "Shrijit"
+										},
+										"body": {
+											"value": "{\n   \"order_no\":[],\n   \"date_from\":\"15/10/2022 00:00:00\",\n   \"date_to\":\"21/10/2022 23:59:59\",\n   \"order_location\":\"\",\n   \"fulfillmentLocation\":\"\",\n   \"pageNumber\":\"1\",\n   \"filterBy\":\"1\"\n }",
+											"type": "Expression"
+										}
+									}
+								},
+								{
+									"name": "Copy IN as JSON",
+									"type": "Copy",
+									"dependsOn": [
+										{
+											"activity": "Web2",
+											"dependencyConditions": [
+												"Completed"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "RestSource",
+											"httpRequestTimeout": "00:01:40",
+											"requestInterval": "00.00:00:00.010",
+											"requestMethod": "POST",
+											"requestBody": {
+												"value": "@string(activity('Web2').output)",
+												"type": "Expression"
+											},
+											"paginationRules": {
+												"supportRFC5988": "true"
+											}
+										},
+										"sink": {
+											"type": "JsonSink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings"
+											},
+											"formatSettings": {
+												"type": "JsonWriteSettings"
+											}
+										},
+										"enableStaging": false
+									},
+									"inputs": [
+										{
+											"referenceName": "DS_REST_Vin_ShipmentDetail",
+											"type": "DatasetReference"
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "LS_JSON_Vin_ShipmentDetail",
+											"type": "DatasetReference"
+										}
+									]
+								},
+								{
+									"name": "Copy ADLS-Synapse",
+									"type": "Copy",
+									"dependsOn": [
+										{
+											"activity": "Copy IN as JSON",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "JsonSource",
+											"storeSettings": {
+												"type": "AzureBlobFSReadSettings",
+												"recursive": true,
+												"wildcardFolderPath": "Vin_ShipmentDetails/IN",
+												"wildcardFileName": "*.json",
+												"enablePartitionDiscovery": false
+											},
+											"formatSettings": {
+												"type": "JsonReadSettings"
+											}
+										},
+										"sink": {
+											"type": "SqlDWSink",
+											"allowCopyCommand": true
+										},
+										"enableStaging": true,
+										"stagingSettings": {
+											"linkedServiceName": {
+												"referenceName": "[parameters('LS_ADLSG2_DFXGP_EDW01_STG')]",
+												"type": "LinkedServiceReference"
+											},
+											"path": "staging-shipmentdetail"
+										},
+										"translator": {
+											"type": "TabularTranslator",
+											"mappings": [
+												{
+													"source": {
+														"path": "$['extOrderNo']"
+													},
+													"sink": {
+														"name": "extOrderNo",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['orderNo']"
+													},
+													"sink": {
+														"name": "orderNo",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['orderLocation']"
+													},
+													"sink": {
+														"name": "orderLocation",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['channelName']"
+													},
+													"sink": {
+														"name": "channelName",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['orderType']"
+													},
+													"sink": {
+														"name": "orderType",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['fromLocation']"
+													},
+													"sink": {
+														"name": "fromLocation",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['toLocation']"
+													},
+													"sink": {
+														"name": "toLocation",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['status']"
+													},
+													"sink": {
+														"name": "status",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['remarks']"
+													},
+													"sink": {
+														"name": "remarks",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['grandtotal']"
+													},
+													"sink": {
+														"name": "grandtotal",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['createdDate']"
+													},
+													"sink": {
+														"name": "createdDate",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['orderLineCount']"
+													},
+													"sink": {
+														"name": "orderLineCount",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['itemcount']"
+													},
+													"sink": {
+														"name": "itemcount",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['shippingaddress']"
+													},
+													"sink": {
+														"name": "shippingaddress",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['mobileno']"
+													},
+													"sink": {
+														"name": "mobileno",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['is_giftwrap']"
+													},
+													"sink": {
+														"name": "is_giftwrap",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['giftwrap_msg']"
+													},
+													"sink": {
+														"name": "giftwrap_msg",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['giftwrap_charges']"
+													},
+													"sink": {
+														"name": "giftwrap_charges",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['udf1']"
+													},
+													"sink": {
+														"name": "udf1",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['udf2']"
+													},
+													"sink": {
+														"name": "udf2",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['udf3']"
+													},
+													"sink": {
+														"name": "udf3",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['udf4']"
+													},
+													"sink": {
+														"name": "udf4",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['udf5']"
+													},
+													"sink": {
+														"name": "udf5",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['udf6']"
+													},
+													"sink": {
+														"name": "udf6",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['udf7']"
+													},
+													"sink": {
+														"name": "udf7",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['udf8']"
+													},
+													"sink": {
+														"name": "udf8",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['udf9']"
+													},
+													"sink": {
+														"name": "udf9",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['udf10']"
+													},
+													"sink": {
+														"name": "udf10",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['pickupLocation']"
+													},
+													"sink": {
+														"name": "pickupLocation",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['extDeliveryNo']"
+													},
+													"sink": {
+														"name": "extDeliveryNo",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['extManifestNo']"
+													},
+													"sink": {
+														"name": "extManifestNo",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['extInvNo']"
+													},
+													"sink": {
+														"name": "extInvNo",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['shipState']"
+													},
+													"sink": {
+														"name": "shipState",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['shipCountry']"
+													},
+													"sink": {
+														"name": "shipCountry",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['shipCity']"
+													},
+													"sink": {
+														"name": "shipCity",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['shipPinCode']"
+													},
+													"sink": {
+														"name": "shipPinCode",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['shipLatitude']"
+													},
+													"sink": {
+														"name": "shipLatitude",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['shipLongitude']"
+													},
+													"sink": {
+														"name": "shipLongitude",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['qty']"
+													},
+													"sink": {
+														"name": "qty",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['transporter']"
+													},
+													"sink": {
+														"name": "transporter",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['transporterstatusremark']"
+													},
+													"sink": {
+														"name": "transporterstatusremark",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['transporterstatus']"
+													},
+													"sink": {
+														"name": "transporterstatus",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['extTransCode']"
+													},
+													"sink": {
+														"name": "extTransCode",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['obExtTransporterName']"
+													},
+													"sink": {
+														"name": "obExtTransporterName",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['shipdate']"
+													},
+													"sink": {
+														"name": "shipdate",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['updated_date']"
+													},
+													"sink": {
+														"name": "updated_date",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['delivereddate']"
+													},
+													"sink": {
+														"name": "delivereddate",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['deliveryNumber']"
+													},
+													"sink": {
+														"name": "deliveryNumber",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['fulfillmentLocation']"
+													},
+													"sink": {
+														"name": "fulfillmentLocation",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['tracking_number']"
+													},
+													"sink": {
+														"name": "tracking_number",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['expdeldate_min']"
+													},
+													"sink": {
+														"name": "expdeldate_min",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['expdeldate_max']"
+													},
+													"sink": {
+														"name": "expdeldate_max",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['collectable_amount']"
+													},
+													"sink": {
+														"name": "collectable_amount",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['allocation_date']"
+													},
+													"sink": {
+														"name": "allocation_date",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['pick_date']"
+													},
+													"sink": {
+														"name": "pick_date",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['pack_date']"
+													},
+													"sink": {
+														"name": "pack_date",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['shipment_value']"
+													},
+													"sink": {
+														"name": "shipment_value",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['picklistNo']"
+													},
+													"sink": {
+														"name": "picklistNo",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['manifestNo']"
+													},
+													"sink": {
+														"name": "manifestNo",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['handoverStatus']"
+													},
+													"sink": {
+														"name": "handoverStatus",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['invoiceNo']"
+													},
+													"sink": {
+														"name": "invoiceNo",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['proofOfDelivery']"
+													},
+													"sink": {
+														"name": "proofOfDelivery",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['transporterCode']"
+													},
+													"sink": {
+														"name": "transporterCode",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['length']"
+													},
+													"sink": {
+														"name": "length",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['breadth']"
+													},
+													"sink": {
+														"name": "breadth",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['height']"
+													},
+													"sink": {
+														"name": "height",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['weight']"
+													},
+													"sink": {
+														"name": "weight",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['lineno']"
+													},
+													"sink": {
+														"name": "lineno",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['extLineNo']"
+													},
+													"sink": {
+														"name": "extLineNo",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['sku']"
+													},
+													"sink": {
+														"name": "sku",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['order_qty']"
+													},
+													"sink": {
+														"name": "order_qty",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['deliveryQty']"
+													},
+													"sink": {
+														"name": "deliveryQty",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['wipQty']"
+													},
+													"sink": {
+														"name": "wipQty",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['pickedQty']"
+													},
+													"sink": {
+														"name": "pickedQty",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['shippedQty']"
+													},
+													"sink": {
+														"name": "shippedQty",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['closedQty']"
+													},
+													"sink": {
+														"name": "closedQty",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['closed_date']"
+													},
+													"sink": {
+														"name": "closed_date",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['returnedQty']"
+													},
+													"sink": {
+														"name": "returnQty",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['deliveredQty']"
+													},
+													"sink": {
+														"name": "deliveredQty",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['imageUrl']"
+													},
+													"sink": {
+														"name": "imageUrl",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['itemName']"
+													},
+													"sink": {
+														"name": "itemName",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['price']"
+													},
+													"sink": {
+														"name": "price",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['binCode']"
+													},
+													"sink": {
+														"name": "binCode",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['serialNo1'][0]"
+													},
+													"sink": {
+														"name": "serialNo1",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['serialNo2'][0]"
+													},
+													"sink": {
+														"name": "serialNo2",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['serialNo3'][0]"
+													},
+													"sink": {
+														"name": "serialNo3",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['lotno']"
+													},
+													"sink": {
+														"name": "lotno",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['lottable01']"
+													},
+													"sink": {
+														"name": "lottable01",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['lottable02']"
+													},
+													"sink": {
+														"name": "lottable02",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['lottable03']"
+													},
+													"sink": {
+														"name": "lottable03",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['lottable04']"
+													},
+													"sink": {
+														"name": "lottable04",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['lottable05']"
+													},
+													"sink": {
+														"name": "lottable05",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['lottable06']"
+													},
+													"sink": {
+														"name": "lottable06",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['discAmount']"
+													},
+													"sink": {
+														"name": "discAmount",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['binSequence']"
+													},
+													"sink": {
+														"name": "binSequence",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['toLPN']"
+													},
+													"sink": {
+														"name": "toLPN",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['taxPercentage']"
+													},
+													"sink": {
+														"name": "taxPercentage",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['skuUSNs'][0]"
+													},
+													"sink": {
+														"name": "skuUSNs",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['ETLLoadDate']"
+													},
+													"sink": {
+														"name": "ETLLoadDate",
+														"type": "String"
+													}
+												}
+											],
+											"collectionReference": "",
+											"mapComplexValuesToString": false
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "DS_ADLSGEN2_Vin_ShipmentDetail",
+											"type": "DatasetReference"
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "LS_Sink_Vin_ShipmentDetail",
+											"type": "DatasetReference"
+										}
+									]
+								},
+								{
+									"name": "COPY IN-OUT",
+									"type": "Copy",
+									"dependsOn": [
+										{
+											"activity": "Copy ADLS-Synapse",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "JsonSource",
+											"storeSettings": {
+												"type": "AzureBlobFSReadSettings",
+												"recursive": true,
+												"wildcardFolderPath": "Vin_OrdserInvoiceV3/IN",
+												"wildcardFileName": "*.json",
+												"enablePartitionDiscovery": false
+											},
+											"formatSettings": {
+												"type": "JsonReadSettings"
+											}
+										},
+										"sink": {
+											"type": "JsonSink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings"
+											},
+											"formatSettings": {
+												"type": "JsonWriteSettings"
+											}
+										},
+										"enableStaging": false
+									},
+									"inputs": [
+										{
+											"referenceName": "DS_IN_Vin_ShipmentDetail",
+											"type": "DatasetReference"
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DS_OUT_Vin_ShipmentDetail",
+											"type": "DatasetReference"
+										}
+									]
+								},
+								{
+									"name": "Delete-IN",
+									"type": "Delete",
+									"dependsOn": [
+										{
+											"activity": "COPY IN-OUT",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"dataset": {
+											"referenceName": "DS_IN_Vin_ShipmentDetail",
+											"type": "DatasetReference"
+										},
+										"enableLogging": false,
+										"storeSettings": {
+											"type": "AzureBlobFSReadSettings",
+											"recursive": true,
+											"wildcardFileName": "*.json",
+											"enablePartitionDiscovery": false
+										}
+									}
+								}
+							]
+						}
+					},
+					{
+						"name": "Stored procedure1",
+						"type": "SqlServerStoredProcedure",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"storedProcedureName": "[[STG_Duroflex_BI].[STG_VINOrder_ShipmentDetail_SP]"
+						},
+						"linkedServiceName": {
+							"referenceName": "[parameters('LS_AzSynapse_DFXGP_EDW01')]",
+							"type": "LinkedServiceReference"
+						}
+					},
+					{
+						"name": "Set FromDate",
+						"type": "SetVariable",
+						"dependsOn": [
+							{
+								"activity": "Stored procedure1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "FromDate",
+							"value": {
+								"value": "@formatDateTime(subtractFromTime(convertTimeZone(utcNow(),'UTC','India Standard Time'),6,'Day'),'dd/MM/yyyy hh:mm:ss')",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "Set End Date",
+						"type": "SetVariable",
+						"dependsOn": [
+							{
+								"activity": "Set FromDate",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "EndDate",
+							"value": {
+								"value": "@utcNow('dd/MM/yyyy hh:mm:ss')",
+								"type": "Expression"
+							}
+						}
+					}
+				],
+				"variables": {
+					"PageNumber": {
+						"type": "String"
+					},
+					"PageNumberValue": {
+						"type": "String"
+					},
+					"Vinculum Result": {
+						"type": "Array"
+					},
+					"FromDate": {
+						"type": "String"
+					},
+					"EndDate": {
+						"type": "String"
+					},
+					"ISTConversion": {
+						"type": "String"
+					}
+				},
+				"folder": {
+					"name": "Vinculum-REST API"
+				},
+				"annotations": [],
+				"lastPublishTime": "2022-12-09T10:14:04Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/DS_REST_Vin_ShipmentDetail')]",
+				"[concat(variables('factoryId'), '/datasets/LS_JSON_Vin_ShipmentDetail')]",
+				"[concat(variables('factoryId'), '/datasets/DS_ADLSGEN2_Vin_ShipmentDetail')]",
+				"[concat(variables('factoryId'), '/datasets/LS_Sink_Vin_ShipmentDetail')]",
+				"[concat(variables('factoryId'), '/datasets/DS_IN_Vin_ShipmentDetail')]",
+				"[concat(variables('factoryId'), '/datasets/DS_OUT_Vin_ShipmentDetail')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_REST_Vin_ShipmentDetail')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_REST_Vin_ShipmentDetail')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "RestResource",
+				"schema": []
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/LS_JSON_Vin_ShipmentDetail')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_ADLSG2_DFXGP_EDW01_STG')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "Json",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"folderPath": "Vin_ShipmentDetails/IN",
+						"fileSystem": "fs-ci-dfxgp-vinculum"
+					}
+				},
+				"schema": {
+					"type": "object",
+					"properties": {
+						"extOrderNo": {
+							"type": "string"
+						},
+						"orderNo": {
+							"type": "string"
+						},
+						"orderLocation": {
+							"type": "string"
+						},
+						"channelName": {
+							"type": "string"
+						},
+						"orderType": {
+							"type": "string"
+						},
+						"fromLocation": {
+							"type": "string"
+						},
+						"toLocation": {
+							"type": "string"
+						},
+						"status": {
+							"type": "string"
+						},
+						"remarks": {
+							"type": "string"
+						},
+						"grandtotal": {
+							"type": "string"
+						},
+						"createdDate": {
+							"type": "string"
+						},
+						"orderLineCount": {
+							"type": "string"
+						},
+						"itemcount": {
+							"type": "string"
+						},
+						"shippingaddress": {
+							"type": "string"
+						},
+						"mobileno": {
+							"type": "string"
+						},
+						"is_giftwrap": {
+							"type": "string"
+						},
+						"giftwrap_msg": {
+							"type": "string"
+						},
+						"giftwrap_charges": {
+							"type": "string"
+						},
+						"udf1": {
+							"type": "string"
+						},
+						"udf2": {
+							"type": "string"
+						},
+						"udf3": {
+							"type": "string"
+						},
+						"udf4": {
+							"type": "string"
+						},
+						"udf5": {
+							"type": "string"
+						},
+						"udf6": {
+							"type": "string"
+						},
+						"udf7": {
+							"type": "string"
+						},
+						"udf8": {
+							"type": "string"
+						},
+						"udf9": {
+							"type": "string"
+						},
+						"udf10": {
+							"type": "string"
+						},
+						"pickupLocation": {
+							"type": "string"
+						},
+						"extDeliveryNo": {
+							"type": "string"
+						},
+						"extManifestNo": {
+							"type": "string"
+						},
+						"extInvNo": {
+							"type": "string"
+						},
+						"shipState": {
+							"type": "string"
+						},
+						"shipCountry": {
+							"type": "string"
+						},
+						"shipCity": {
+							"type": "string"
+						},
+						"shipPinCode": {
+							"type": "string"
+						},
+						"shipLatitude": {
+							"type": "string"
+						},
+						"shipLongitude": {
+							"type": "string"
+						},
+						"qty": {
+							"type": "string"
+						},
+						"transporter": {
+							"type": "string"
+						},
+						"transporterstatusremark": {
+							"type": "string"
+						},
+						"transporterstatus": {
+							"type": "string"
+						},
+						"extTransCode": {
+							"type": "string"
+						},
+						"obExtTransporterName": {
+							"type": "string"
+						},
+						"shipdate": {
+							"type": "string"
+						},
+						"updated_date": {
+							"type": "string"
+						},
+						"delivereddate": {
+							"type": "string"
+						},
+						"deliveryNumber": {
+							"type": "string"
+						},
+						"fulfillmentLocation": {
+							"type": "string"
+						},
+						"tracking_number": {
+							"type": "string"
+						},
+						"expdeldate_min": {
+							"type": "string"
+						},
+						"expdeldate_max": {
+							"type": "string"
+						},
+						"collectable_amount": {
+							"type": "string"
+						},
+						"allocation_date": {
+							"type": "string"
+						},
+						"pick_date": {
+							"type": "string"
+						},
+						"pack_date": {
+							"type": "string"
+						},
+						"shipment_value": {
+							"type": "string"
+						},
+						"picklistNo": {
+							"type": "string"
+						},
+						"manifestNo": {
+							"type": "string"
+						},
+						"handoverStatus": {
+							"type": "string"
+						},
+						"invoiceNo": {
+							"type": "string"
+						},
+						"proofOfDelivery": {
+							"type": "string"
+						},
+						"transporterCode": {
+							"type": "string"
+						},
+						"length": {
+							"type": "string"
+						},
+						"breadth": {
+							"type": "string"
+						},
+						"height": {
+							"type": "string"
+						},
+						"weight": {
+							"type": "string"
+						},
+						"lineno": {
+							"type": "string"
+						},
+						"extLineNo": {
+							"type": "string"
+						},
+						"sku": {
+							"type": "string"
+						},
+						"order_qty": {
+							"type": "string"
+						},
+						"deliveryQty": {
+							"type": "string"
+						},
+						"wipQty": {
+							"type": "string"
+						},
+						"pickedQty": {
+							"type": "string"
+						},
+						"shippedQty": {
+							"type": "string"
+						},
+						"closedQty": {
+							"type": "string"
+						},
+						"closed_date": {
+							"type": "string"
+						},
+						"returnedQty": {
+							"type": "string"
+						},
+						"deliveredQty": {
+							"type": "string"
+						},
+						"imageUrl": {
+							"type": "string"
+						},
+						"itemName": {
+							"type": "string"
+						},
+						"price": {
+							"type": "string"
+						},
+						"binCode": {
+							"type": "string"
+						},
+						"serialNo1": {
+							"type": "array",
+							"items": {
+								"type": "string"
+							}
+						},
+						"serialNo2": {
+							"type": "array",
+							"items": {
+								"type": "string"
+							}
+						},
+						"serialNo3": {
+							"type": "array",
+							"items": {
+								"type": "string"
+							}
+						},
+						"lotno": {
+							"type": "string"
+						},
+						"lottable01": {
+							"type": "string"
+						},
+						"lottable02": {
+							"type": "string"
+						},
+						"lottable03": {
+							"type": "string"
+						},
+						"lottable04": {
+							"type": "string"
+						},
+						"lottable05": {
+							"type": "string"
+						},
+						"lottable06": {
+							"type": "string"
+						},
+						"discAmount": {
+							"type": "string"
+						},
+						"binSequence": {
+							"type": "string"
+						},
+						"toLPN": {
+							"type": "string"
+						},
+						"taxPercentage": {
+							"type": "string"
+						},
+						"skuUSNs": {
+							"type": "array",
+							"items": {
+								"type": "string"
+							}
+						},
+						"ETLLoadDate": {
+							"type": "string"
+						}
+					}
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_ADLSGEN2_Vin_ShipmentDetail')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_ADLSG2_DFXGP_EDW01_STG')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "Json",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"folderPath": "Vin_ShipmentDetails/IN",
+						"fileSystem": "fs-ci-dfxgp-vinculum"
+					}
+				},
+				"schema": {
+					"type": "object",
+					"properties": {
+						"extOrderNo": {
+							"type": "string"
+						},
+						"orderNo": {
+							"type": "string"
+						},
+						"orderLocation": {
+							"type": "string"
+						},
+						"channelName": {
+							"type": "string"
+						},
+						"orderType": {
+							"type": "string"
+						},
+						"fromLocation": {
+							"type": "string"
+						},
+						"toLocation": {
+							"type": "string"
+						},
+						"status": {
+							"type": "string"
+						},
+						"remarks": {
+							"type": "string"
+						},
+						"grandtotal": {
+							"type": "string"
+						},
+						"createdDate": {
+							"type": "string"
+						},
+						"orderLineCount": {
+							"type": "string"
+						},
+						"itemcount": {
+							"type": "string"
+						},
+						"shippingaddress": {
+							"type": "string"
+						},
+						"mobileno": {
+							"type": "string"
+						},
+						"is_giftwrap": {
+							"type": "string"
+						},
+						"giftwrap_msg": {
+							"type": "string"
+						},
+						"giftwrap_charges": {
+							"type": "string"
+						},
+						"udf1": {
+							"type": "string"
+						},
+						"udf2": {
+							"type": "string"
+						},
+						"udf3": {
+							"type": "string"
+						},
+						"udf4": {
+							"type": "string"
+						},
+						"udf5": {
+							"type": "string"
+						},
+						"udf6": {
+							"type": "string"
+						},
+						"udf7": {
+							"type": "string"
+						},
+						"udf8": {
+							"type": "string"
+						},
+						"udf9": {
+							"type": "string"
+						},
+						"udf10": {
+							"type": "string"
+						},
+						"pickupLocation": {
+							"type": "string"
+						},
+						"extDeliveryNo": {
+							"type": "string"
+						},
+						"extManifestNo": {
+							"type": "string"
+						},
+						"extInvNo": {
+							"type": "string"
+						},
+						"shipState": {
+							"type": "string"
+						},
+						"shipCountry": {
+							"type": "string"
+						},
+						"shipCity": {
+							"type": "string"
+						},
+						"shipPinCode": {
+							"type": "string"
+						},
+						"shipLatitude": {
+							"type": "string"
+						},
+						"shipLongitude": {
+							"type": "string"
+						},
+						"qty": {
+							"type": "string"
+						},
+						"transporter": {
+							"type": "string"
+						},
+						"transporterstatusremark": {
+							"type": "string"
+						},
+						"transporterstatus": {
+							"type": "string"
+						},
+						"extTransCode": {
+							"type": "string"
+						},
+						"obExtTransporterName": {
+							"type": "string"
+						},
+						"shipdate": {
+							"type": "string"
+						},
+						"updated_date": {
+							"type": "string"
+						},
+						"delivereddate": {
+							"type": "string"
+						},
+						"deliveryNumber": {
+							"type": "string"
+						},
+						"fulfillmentLocation": {
+							"type": "string"
+						},
+						"tracking_number": {
+							"type": "string"
+						},
+						"expdeldate_min": {
+							"type": "string"
+						},
+						"expdeldate_max": {
+							"type": "string"
+						},
+						"collectable_amount": {
+							"type": "string"
+						},
+						"allocation_date": {
+							"type": "string"
+						},
+						"pick_date": {
+							"type": "string"
+						},
+						"pack_date": {
+							"type": "string"
+						},
+						"shipment_value": {
+							"type": "string"
+						},
+						"picklistNo": {
+							"type": "string"
+						},
+						"manifestNo": {
+							"type": "string"
+						},
+						"handoverStatus": {
+							"type": "string"
+						},
+						"invoiceNo": {
+							"type": "string"
+						},
+						"proofOfDelivery": {
+							"type": "string"
+						},
+						"transporterCode": {
+							"type": "string"
+						},
+						"length": {
+							"type": "string"
+						},
+						"breadth": {
+							"type": "string"
+						},
+						"height": {
+							"type": "string"
+						},
+						"weight": {
+							"type": "string"
+						},
+						"lineno": {
+							"type": "string"
+						},
+						"extLineNo": {
+							"type": "string"
+						},
+						"sku": {
+							"type": "string"
+						},
+						"order_qty": {
+							"type": "string"
+						},
+						"deliveryQty": {
+							"type": "string"
+						},
+						"wipQty": {
+							"type": "string"
+						},
+						"pickedQty": {
+							"type": "string"
+						},
+						"shippedQty": {
+							"type": "string"
+						},
+						"closedQty": {
+							"type": "string"
+						},
+						"closed_date": {
+							"type": "string"
+						},
+						"returnedQty": {
+							"type": "string"
+						},
+						"deliveredQty": {
+							"type": "string"
+						},
+						"imageUrl": {
+							"type": "string"
+						},
+						"itemName": {
+							"type": "string"
+						},
+						"price": {
+							"type": "string"
+						},
+						"binCode": {
+							"type": "string"
+						},
+						"serialNo1": {
+							"type": "array",
+							"items": {
+								"type": "string"
+							}
+						},
+						"serialNo2": {
+							"type": "array",
+							"items": {
+								"type": "string"
+							}
+						},
+						"serialNo3": {
+							"type": "array",
+							"items": {
+								"type": "string"
+							}
+						},
+						"lotno": {
+							"type": "string"
+						},
+						"lottable01": {
+							"type": "string"
+						},
+						"lottable02": {
+							"type": "string"
+						},
+						"lottable03": {
+							"type": "string"
+						},
+						"lottable04": {
+							"type": "string"
+						},
+						"lottable05": {
+							"type": "string"
+						},
+						"lottable06": {
+							"type": "string"
+						},
+						"discAmount": {
+							"type": "string"
+						},
+						"binSequence": {
+							"type": "string"
+						},
+						"toLPN": {
+							"type": "string"
+						},
+						"taxPercentage": {
+							"type": "string"
+						},
+						"skuUSNs": {
+							"type": "array",
+							"items": {
+								"type": "string"
+							}
+						},
+						"ETLLoadDate": {
+							"type": "string"
+						}
+					}
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/LS_Sink_Vin_ShipmentDetail')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_AzSynapse_DFXGP_EDW01')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "AzureSqlDWTable",
+				"schema": [
+					{
+						"name": "extOrderNo",
+						"type": "nvarchar"
+					},
+					{
+						"name": "orderType",
+						"type": "nvarchar"
+					},
+					{
+						"name": "orderNo",
+						"type": "nvarchar"
+					},
+					{
+						"name": "orderLocation",
+						"type": "nvarchar"
+					},
+					{
+						"name": "channelName",
+						"type": "nvarchar"
+					},
+					{
+						"name": "fromLocation",
+						"type": "nvarchar"
+					},
+					{
+						"name": "toLocation",
+						"type": "nvarchar"
+					},
+					{
+						"name": "status",
+						"type": "nvarchar"
+					},
+					{
+						"name": "remarks",
+						"type": "nvarchar"
+					},
+					{
+						"name": "grandtotal",
+						"type": "varchar"
+					},
+					{
+						"name": "createdDate",
+						"type": "nvarchar"
+					},
+					{
+						"name": "orderLineCount",
+						"type": "varchar"
+					},
+					{
+						"name": "itemcount",
+						"type": "nvarchar"
+					},
+					{
+						"name": "shippingaddress",
+						"type": "nvarchar"
+					},
+					{
+						"name": "mobileno",
+						"type": "nvarchar"
+					},
+					{
+						"name": "is_giftwrap",
+						"type": "nvarchar"
+					},
+					{
+						"name": "giftwrap_msg",
+						"type": "nvarchar"
+					},
+					{
+						"name": "giftwrap_charges",
+						"type": "nvarchar"
+					},
+					{
+						"name": "udf1",
+						"type": "nvarchar"
+					},
+					{
+						"name": "udf2",
+						"type": "nvarchar"
+					},
+					{
+						"name": "udf3",
+						"type": "nvarchar"
+					},
+					{
+						"name": "udf4",
+						"type": "nvarchar"
+					},
+					{
+						"name": "udf5",
+						"type": "nvarchar"
+					},
+					{
+						"name": "udf6",
+						"type": "nvarchar"
+					},
+					{
+						"name": "udf7",
+						"type": "nvarchar"
+					},
+					{
+						"name": "udf8",
+						"type": "nvarchar"
+					},
+					{
+						"name": "udf9",
+						"type": "nvarchar"
+					},
+					{
+						"name": "udf10",
+						"type": "nvarchar"
+					},
+					{
+						"name": "pickupLocation",
+						"type": "nvarchar"
+					},
+					{
+						"name": "extDeliveryNo",
+						"type": "nvarchar"
+					},
+					{
+						"name": "extManifestNo",
+						"type": "nvarchar"
+					},
+					{
+						"name": "extInvNo",
+						"type": "nvarchar"
+					},
+					{
+						"name": "shipState",
+						"type": "nvarchar"
+					},
+					{
+						"name": "shipCountry",
+						"type": "nvarchar"
+					},
+					{
+						"name": "shipCity",
+						"type": "nvarchar"
+					},
+					{
+						"name": "shipPinCode",
+						"type": "nvarchar"
+					},
+					{
+						"name": "shipLatitude",
+						"type": "nvarchar"
+					},
+					{
+						"name": "shipLongitude",
+						"type": "varchar"
+					},
+					{
+						"name": "qty",
+						"type": "varchar"
+					},
+					{
+						"name": "transporter",
+						"type": "varchar"
+					},
+					{
+						"name": "transporterstatusremark",
+						"type": "varchar"
+					},
+					{
+						"name": "transporterstatus",
+						"type": "varchar"
+					},
+					{
+						"name": "extTransCode",
+						"type": "varchar"
+					},
+					{
+						"name": "obExtTransporterName",
+						"type": "varchar"
+					},
+					{
+						"name": "shipdate",
+						"type": "varchar"
+					},
+					{
+						"name": "updated_date",
+						"type": "varchar"
+					},
+					{
+						"name": "delivereddate",
+						"type": "nvarchar"
+					},
+					{
+						"name": "deliveryNumber",
+						"type": "nvarchar"
+					},
+					{
+						"name": "fulfillmentLocation",
+						"type": "nvarchar"
+					},
+					{
+						"name": "tracking_number",
+						"type": "nvarchar"
+					},
+					{
+						"name": "status_shipmentdetails",
+						"type": "nvarchar"
+					},
+					{
+						"name": "expdeldate_min",
+						"type": "nvarchar"
+					},
+					{
+						"name": "expdeldate_max",
+						"type": "nvarchar"
+					},
+					{
+						"name": "collectable_amount",
+						"type": "nvarchar"
+					},
+					{
+						"name": "allocation_date",
+						"type": "nvarchar"
+					},
+					{
+						"name": "pick_date",
+						"type": "varchar"
+					},
+					{
+						"name": "pack_date",
+						"type": "varchar"
+					},
+					{
+						"name": "shipment_value",
+						"type": "nvarchar"
+					},
+					{
+						"name": "picklistNo",
+						"type": "nvarchar"
+					},
+					{
+						"name": "manifestNo",
+						"type": "nvarchar"
+					},
+					{
+						"name": "handoverStatus",
+						"type": "varchar"
+					},
+					{
+						"name": "invoiceNo",
+						"type": "varchar"
+					},
+					{
+						"name": "proofOfDelivery",
+						"type": "varchar"
+					},
+					{
+						"name": "transporterCode",
+						"type": "varchar"
+					},
+					{
+						"name": "length",
+						"type": "nvarchar"
+					},
+					{
+						"name": "breadth",
+						"type": "nvarchar"
+					},
+					{
+						"name": "height",
+						"type": "nvarchar"
+					},
+					{
+						"name": "weight",
+						"type": "nvarchar"
+					},
+					{
+						"name": "lineno",
+						"type": "nvarchar"
+					},
+					{
+						"name": "sku",
+						"type": "nvarchar"
+					},
+					{
+						"name": "extLineNo",
+						"type": "nvarchar"
+					},
+					{
+						"name": "status_item",
+						"type": "varchar"
+					},
+					{
+						"name": "shippedQty",
+						"type": "varchar"
+					},
+					{
+						"name": "returnQty",
+						"type": "varchar"
+					},
+					{
+						"name": "deliveryQty",
+						"type": "varchar"
+					},
+					{
+						"name": "wipQty",
+						"type": "varchar"
+					},
+					{
+						"name": "pickedQty",
+						"type": "nvarchar"
+					},
+					{
+						"name": "closedQty",
+						"type": "nvarchar"
+					},
+					{
+						"name": "closed_date",
+						"type": "nvarchar"
+					},
+					{
+						"name": "deliveredQty",
+						"type": "nvarchar"
+					},
+					{
+						"name": "imageUrl",
+						"type": "nvarchar"
+					},
+					{
+						"name": "itemName",
+						"type": "nvarchar"
+					},
+					{
+						"name": "price",
+						"type": "nvarchar"
+					},
+					{
+						"name": "binCode",
+						"type": "nvarchar"
+					},
+					{
+						"name": "serialNo1",
+						"type": "nvarchar"
+					},
+					{
+						"name": "serialNo2",
+						"type": "nvarchar"
+					},
+					{
+						"name": "serialNo3",
+						"type": "nvarchar"
+					},
+					{
+						"name": "lotno",
+						"type": "nvarchar"
+					},
+					{
+						"name": "lottable01",
+						"type": "varchar"
+					},
+					{
+						"name": "lottable02",
+						"type": "varchar"
+					},
+					{
+						"name": "lottable03",
+						"type": "varchar"
+					},
+					{
+						"name": "lottable04",
+						"type": "nvarchar"
+					},
+					{
+						"name": "lottable05",
+						"type": "nvarchar"
+					},
+					{
+						"name": "lottable06",
+						"type": "nvarchar"
+					},
+					{
+						"name": "udf1_1",
+						"type": "nvarchar"
+					},
+					{
+						"name": "udf2_2",
+						"type": "nvarchar"
+					},
+					{
+						"name": "udf3_3",
+						"type": "nvarchar"
+					},
+					{
+						"name": "udf4_4",
+						"type": "nvarchar"
+					},
+					{
+						"name": "udf5_5",
+						"type": "nvarchar"
+					},
+					{
+						"name": "discAmount",
+						"type": "nvarchar"
+					},
+					{
+						"name": "binSequence",
+						"type": "varchar"
+					},
+					{
+						"name": "toLPN",
+						"type": "nvarchar"
+					},
+					{
+						"name": "taxPercentage",
+						"type": "nvarchar"
+					},
+					{
+						"name": "skuUSNs",
+						"type": "nvarchar"
+					},
+					{
+						"name": "order_qty",
+						"type": "varchar"
+					},
+					{
+						"name": "ETLLoadDate",
+						"type": "varchar"
+					}
+				],
+				"typeProperties": {
+					"schema": "STG_Duroflex_BI",
+					"table": "STG_Vinculum_Order_ShipmentDetail"
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_IN_Vin_ShipmentDetail')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_ADLSG2_DFXGP_EDW01_STG')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "Json",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"folderPath": "Vin_ShipmentDetails/IN",
+						"fileSystem": "fs-ci-dfxgp-vinculum"
+					}
+				},
+				"schema": {
+					"type": "object",
+					"properties": {
+						"extOrderNo": {
+							"type": "string"
+						},
+						"orderNo": {
+							"type": "string"
+						},
+						"orderLocation": {
+							"type": "string"
+						},
+						"channelName": {
+							"type": "string"
+						},
+						"orderType": {
+							"type": "string"
+						},
+						"fromLocation": {
+							"type": "string"
+						},
+						"toLocation": {
+							"type": "string"
+						},
+						"status": {
+							"type": "string"
+						},
+						"remarks": {
+							"type": "string"
+						},
+						"grandtotal": {
+							"type": "string"
+						},
+						"createdDate": {
+							"type": "string"
+						},
+						"orderLineCount": {
+							"type": "string"
+						},
+						"itemcount": {
+							"type": "string"
+						},
+						"shippingaddress": {
+							"type": "string"
+						},
+						"mobileno": {
+							"type": "string"
+						},
+						"is_giftwrap": {
+							"type": "string"
+						},
+						"giftwrap_msg": {
+							"type": "string"
+						},
+						"giftwrap_charges": {
+							"type": "string"
+						},
+						"udf1": {
+							"type": "string"
+						},
+						"udf2": {
+							"type": "string"
+						},
+						"udf3": {
+							"type": "string"
+						},
+						"udf4": {
+							"type": "string"
+						},
+						"udf5": {
+							"type": "string"
+						},
+						"udf6": {
+							"type": "string"
+						},
+						"udf7": {
+							"type": "string"
+						},
+						"udf8": {
+							"type": "string"
+						},
+						"udf9": {
+							"type": "string"
+						},
+						"udf10": {
+							"type": "string"
+						},
+						"pickupLocation": {
+							"type": "string"
+						},
+						"extDeliveryNo": {
+							"type": "string"
+						},
+						"extManifestNo": {
+							"type": "string"
+						},
+						"extInvNo": {
+							"type": "string"
+						},
+						"shipState": {
+							"type": "string"
+						},
+						"shipCountry": {
+							"type": "string"
+						},
+						"shipCity": {
+							"type": "string"
+						},
+						"shipPinCode": {
+							"type": "string"
+						},
+						"shipLatitude": {
+							"type": "string"
+						},
+						"shipLongitude": {
+							"type": "string"
+						},
+						"qty": {
+							"type": "string"
+						},
+						"transporter": {
+							"type": "string"
+						},
+						"transporterstatusremark": {
+							"type": "string"
+						},
+						"transporterstatus": {
+							"type": "string"
+						},
+						"extTransCode": {
+							"type": "string"
+						},
+						"obExtTransporterName": {
+							"type": "string"
+						},
+						"shipdate": {
+							"type": "string"
+						},
+						"updated_date": {
+							"type": "string"
+						},
+						"delivereddate": {
+							"type": "string"
+						},
+						"deliveryNumber": {
+							"type": "string"
+						},
+						"fulfillmentLocation": {
+							"type": "string"
+						},
+						"tracking_number": {
+							"type": "string"
+						},
+						"expdeldate_min": {
+							"type": "string"
+						},
+						"expdeldate_max": {
+							"type": "string"
+						},
+						"collectable_amount": {
+							"type": "string"
+						},
+						"allocation_date": {
+							"type": "string"
+						},
+						"pick_date": {
+							"type": "string"
+						},
+						"pack_date": {
+							"type": "string"
+						},
+						"shipment_value": {
+							"type": "string"
+						},
+						"picklistNo": {
+							"type": "string"
+						},
+						"manifestNo": {
+							"type": "string"
+						},
+						"handoverStatus": {
+							"type": "string"
+						},
+						"invoiceNo": {
+							"type": "string"
+						},
+						"proofOfDelivery": {
+							"type": "string"
+						},
+						"transporterCode": {
+							"type": "string"
+						},
+						"length": {
+							"type": "string"
+						},
+						"breadth": {
+							"type": "string"
+						},
+						"height": {
+							"type": "string"
+						},
+						"weight": {
+							"type": "string"
+						},
+						"lineno": {
+							"type": "string"
+						},
+						"extLineNo": {
+							"type": "string"
+						},
+						"sku": {
+							"type": "string"
+						},
+						"order_qty": {
+							"type": "string"
+						},
+						"deliveryQty": {
+							"type": "string"
+						},
+						"wipQty": {
+							"type": "string"
+						},
+						"pickedQty": {
+							"type": "string"
+						},
+						"shippedQty": {
+							"type": "string"
+						},
+						"closedQty": {
+							"type": "string"
+						},
+						"closed_date": {
+							"type": "string"
+						},
+						"returnedQty": {
+							"type": "string"
+						},
+						"deliveredQty": {
+							"type": "string"
+						},
+						"imageUrl": {
+							"type": "string"
+						},
+						"itemName": {
+							"type": "string"
+						},
+						"price": {
+							"type": "string"
+						},
+						"binCode": {
+							"type": "string"
+						},
+						"serialNo1": {
+							"type": "array",
+							"items": {
+								"type": "string"
+							}
+						},
+						"serialNo2": {
+							"type": "array",
+							"items": {
+								"type": "string"
+							}
+						},
+						"serialNo3": {
+							"type": "array",
+							"items": {
+								"type": "string"
+							}
+						},
+						"lotno": {
+							"type": "string"
+						},
+						"lottable01": {
+							"type": "string"
+						},
+						"lottable02": {
+							"type": "string"
+						},
+						"lottable03": {
+							"type": "string"
+						},
+						"lottable04": {
+							"type": "string"
+						},
+						"lottable05": {
+							"type": "string"
+						},
+						"lottable06": {
+							"type": "string"
+						},
+						"discAmount": {
+							"type": "string"
+						},
+						"binSequence": {
+							"type": "string"
+						},
+						"toLPN": {
+							"type": "string"
+						},
+						"taxPercentage": {
+							"type": "string"
+						},
+						"skuUSNs": {
+							"type": "array",
+							"items": {
+								"type": "string"
+							}
+						},
+						"ETLLoadDate": {
+							"type": "string"
+						}
+					}
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_OUT_Vin_ShipmentDetail')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_ADLSG2_DFXGP_EDW01_STG')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "Json",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"folderPath": "Vin_ShipmentDetails/OUT",
+						"fileSystem": "fs-ci-dfxgp-vinculum"
+					}
+				},
+				"schema": {}
+			},
+			"dependsOn": []
+		}
+	]
+}
