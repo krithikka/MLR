@@ -1,0 +1,1835 @@
+{
+	"$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"factoryName": {
+			"type": "string",
+			"metadata": "Data Factory name"
+		},
+		"LS_Unicomm_Sleepyhead_Tally_Return_GST_Report": {
+			"type": "string"
+		},
+		"LS_ADLSG2_DFXGP_EDW01_STG": {
+			"type": "string"
+		},
+		"LS_AzSynapse_DFXGP_EDW01": {
+			"type": "string"
+		}
+	},
+	"variables": {
+		"factoryId": "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]"
+	},
+	"resources": [
+		{
+			"name": "[concat(parameters('factoryName'), '/pip_Unicomm_Sleepyhead_Tally_Return_GST_Report')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Get Token",
+						"type": "WebActivity",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"url": "https://sleepyhead.unicommerce.com/oauth/token?grant_type=password&client_id=my-trusted-client&username=analytics@mysleepyhead.com&password=Unisleepy@123",
+							"method": "GET"
+						}
+					},
+					{
+						"name": "Get Job Code",
+						"type": "WebActivity",
+						"dependsOn": [
+							{
+								"activity": "Set Start Date in EPOCH",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"url": "https://sleepyhead.unicommerce.com/services/rest/v1/export/job/create",
+							"method": "POST",
+							"headers": {
+								"Authorization": {
+									"value": "Bearer @{activity('Get Token').output.access_token}",
+									"type": "Expression"
+								},
+								"Facility": "HOSUR_ITEM"
+							},
+							"body": {
+								"value": "{\n    \"exportJobTypeName\": \"Sleepyhead Tally Return GST Report\",\n    \"exportColums\": [\n        \"invoiceDate\",\"saleOrderCode\",\"invoiceCode\",\"channelName\",\"channelLedgerName\",\"productCode\",\"productSKU\",\"QTY\",\"unitPrice\",\"Currency\",\"currencyConversionRate\",\"total\",\"customerName\",\"shippingAddressName\",\"shippingAddressLine1\",\"shippingAddressLine2\",\"shippingAddressCity\",\"shippingAddressState\",\"shippingAddressCountry\",\"shippingAddressPincode\",\"shippingAddressPhone\",\"shippingProvider\",\"trackingNumber\",\"sales\",\"igstA\",\"cgstA\",\"sgstA\",\"salesLedgerA\",\"salesLedgerB\",\"salesLedger\",\"cgst\",\"cgstRate\",\"sgst\",\"sgstRate\",\"igst\",\"igstRate\",\"utgst\",\"utgstRate\",\"cess\",\"cessRate\",\"OtherCharges\",\"OtherChargesLedger\",\"OtherCharges1\",\"OtherChargesLedger1\",\"Servicetax\",\"ServicetaxLedger\",\"discountLedger\",\"discountAmount\",\"imei\",\"godDown\",\"dispatchdate\",\"narration\",\"entity\",\"voucherTypeName\",\"tin\",\"original\",\"original1\",\"channelInvoiceDate\",\"channelState\",\"channelPartyGSTIN\",\"customerGSTIN\",\"billingPartyCode\",\"taxLedgerA\",\"taxLedgerB\",\"taxVerification\",\"gstregistrationtype\",\"rpcode\"\n    ],\n    \"exportFilters\": [\n        {\n            \"id\": \"dateRange\",\n            \"dateRange\": {\n                \"start\": @{variables('StartDate-EPOCH')},\n                \"end\": @{variables('EndDate')}\n            }\n        }\n    ],\n    \"frequency\": \"ONETIME\"\n}\n",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "Get Excel Link",
+						"type": "WebActivity",
+						"dependsOn": [
+							{
+								"activity": "Get Job Code",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"url": " https://sleepyhead.unicommerce.com/services/rest/v1/export/job/status",
+							"method": "POST",
+							"headers": {
+								"Authorization": {
+									"value": "Bearer @{activity('Get Token').output.access_token}",
+									"type": "Expression"
+								}
+							},
+							"body": {
+								"value": "{\n    \"jobCode\": \"@{activity('Get Job Code').output.jobCode}\"\n}",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "Set variable1-Excel Link",
+						"type": "SetVariable",
+						"dependsOn": [
+							{
+								"activity": "Get Excel Link_copy1",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "MyURL",
+							"value": {
+								"value": "@activity('Get Excel Link_copy1').output.filePath",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "CopyExcelData",
+						"type": "Copy",
+						"dependsOn": [
+							{
+								"activity": "Set variable1-Excel Link",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "DelimitedTextSource",
+								"storeSettings": {
+									"type": "HttpReadSettings",
+									"requestMethod": "GET"
+								},
+								"formatSettings": {
+									"type": "DelimitedTextReadSettings"
+								}
+							},
+							"sink": {
+								"type": "DelimitedTextSink",
+								"storeSettings": {
+									"type": "AzureBlobFSWriteSettings"
+								},
+								"formatSettings": {
+									"type": "DelimitedTextWriteSettings",
+									"quoteAllText": true,
+									"fileExtension": ".csv"
+								}
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"typeConversion": true,
+								"typeConversionSettings": {
+									"allowDataTruncation": true,
+									"treatBooleanAsNumber": false
+								}
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "DS_Unicomm_Sleepyhead_Tally_Return_GST_Report",
+								"type": "DatasetReference",
+								"parameters": {
+									"BaseURL": {
+										"value": "@variables('MyURL')",
+										"type": "Expression"
+									}
+								}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "DS_unicomm_Sleepyhead_Tally_GSTReport",
+								"type": "DatasetReference"
+							}
+						]
+					},
+					{
+						"name": "Copy ADLSGen2-Synapse",
+						"type": "Copy",
+						"dependsOn": [
+							{
+								"activity": "CopyExcelData",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "DelimitedTextSource",
+								"additionalColumns": [
+									{
+										"name": "FileName",
+										"value": "$$FILEPATH"
+									},
+									{
+										"name": "ETLLoadDate",
+										"value": {
+											"value": "@utcnow()",
+											"type": "Expression"
+										}
+									},
+									{
+										"name": "FilePath",
+										"value": {
+											"value": "\"Sleepyhead_Tally_Return_GST_Report/IN/\"",
+											"type": "Expression"
+										}
+									}
+								],
+								"storeSettings": {
+									"type": "AzureBlobFSReadSettings",
+									"recursive": true,
+									"wildcardFolderPath": "Sleepyhead_Tally_Return_GST_Report/IN",
+									"wildcardFileName": "*.csv",
+									"enablePartitionDiscovery": false
+								},
+								"formatSettings": {
+									"type": "DelimitedTextReadSettings"
+								}
+							},
+							"sink": {
+								"type": "SqlDWSink",
+								"writeBehavior": "Insert",
+								"disableMetricsCollection": false
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"mappings": [
+									{
+										"source": {
+											"name": "Date",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Date",
+											"type": "DateTime"
+										}
+									},
+									{
+										"source": {
+											"name": "Sale Order Number",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Sale Order Number",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Invoice number",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Invoice number",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Channel entry",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Channel entry",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Channel Ledger",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Channel Ledger",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Product Name",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Product Name",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Product SKU Code",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Product SKU Code",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Qty",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Qty",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Unit Price",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Unit Price",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Currency",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Currency",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "conversion rate",
+											"type": "String"
+										},
+										"sink": {
+											"name": "conversion rate",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Total",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Total",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Customer Name",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Customer Name",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Shipping Address Name",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Shipping Address Name",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Shipping Address Line 1",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Shipping Address Line 1",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Shipping Address Line 2",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Shipping Address Line 2",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Shipping Address City",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Shipping Address City",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Shipping Address State",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Shipping Address State",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Shipping Address Country",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Shipping Address Country",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Shipping Address Pincode",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Shipping Address Pincode",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Shipping Address Phone",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Shipping Address Phone",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Shipping Provider",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Shipping Provider",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "AWB num",
+											"type": "String"
+										},
+										"sink": {
+											"name": "AWB num",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Sales",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Sales",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Sales Ledger",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Sales Ledger",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "CGST",
+											"type": "String"
+										},
+										"sink": {
+											"name": "CGST",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "CGST Rate",
+											"type": "String"
+										},
+										"sink": {
+											"name": "CGST Rate",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "SGST",
+											"type": "String"
+										},
+										"sink": {
+											"name": "SGST",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "SGST Rate",
+											"type": "String"
+										},
+										"sink": {
+											"name": "SGST Rate",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "IGST",
+											"type": "String"
+										},
+										"sink": {
+											"name": "IGST",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "IGST Rate",
+											"type": "String"
+										},
+										"sink": {
+											"name": "IGST Rate",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "UTGST",
+											"type": "String"
+										},
+										"sink": {
+											"name": "UTGST",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "UTGST Rate",
+											"type": "String"
+										},
+										"sink": {
+											"name": "UTGST Rate",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "CESS",
+											"type": "String"
+										},
+										"sink": {
+											"name": "CESS",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "CESS Rate",
+											"type": "String"
+										},
+										"sink": {
+											"name": "CESS Rate",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Other charges",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Other charges",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Other charges Ledger",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Other charges Ledger",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Other charges1",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Other charges1",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Other charges Ledger1",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Other charges Ledger1",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Service tax",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Service tax",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "ST Ledger",
+											"type": "String"
+										},
+										"sink": {
+											"name": "ST Ledger",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Discount Ledger",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Discount Ledger",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Discount Amount",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Discount Amount",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "IMEI",
+											"type": "String"
+										},
+										"sink": {
+											"name": "IMEI",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Godown",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Godown",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Dispatch Date/Cancellation Date",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Dispatch Date/Cancellation Date",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Narration",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Narration",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Entity",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Entity",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Voucher Type Name ",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Voucher Type Name",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "TIN NO",
+											"type": "String"
+										},
+										"sink": {
+											"name": "TIN NO",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Original Invoice Date ",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Original Invoice Date",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Original Invoice No",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Original Invoice No",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Invoice Channel Created",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Channel Invoice Created",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Channel State",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Channel State",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Channel_Party GSTIN",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Channel_Party GSTIN",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Customer GSTIN",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Customer GSTIN",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Billing Party Code",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Billing Party Code",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "Tax Verification",
+											"type": "String"
+										},
+										"sink": {
+											"name": "TAX VerificationB",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "GST Registration Type",
+											"type": "String"
+										},
+										"sink": {
+											"name": "GST Registration Type",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "RP Code",
+											"type": "String"
+										},
+										"sink": {
+											"name": "RP Code",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "FileName",
+											"type": "String"
+										},
+										"sink": {
+											"name": "FileName",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "FilePath",
+											"type": "String"
+										},
+										"sink": {
+											"name": "FilePath",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "ETLLoadDate",
+											"type": "String"
+										},
+										"sink": {
+											"name": "ETLLoadDate",
+											"type": "String"
+										}
+									}
+								]
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "DS_Copy_Unicomm_Sleepyhead_Tally_Return_GST_Report",
+								"type": "DatasetReference"
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "DS_Unicomm_Sleepyhead_Tally_Return_GST",
+								"type": "DatasetReference"
+							}
+						]
+					},
+					{
+						"name": "Set variable- End Date in EPOCH",
+						"type": "SetVariable",
+						"dependsOn": [
+							{
+								"activity": "Get_EndDate",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "EndDate",
+							"value": {
+								"value": "@string(sub(div(ticks(variables('EPOCH_EndDate')),10000),div(ticks(pipeline().parameters.param_epoch),10000)))",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "Get-Start Date",
+						"type": "SetVariable",
+						"dependsOn": [
+							{
+								"activity": "Set variable- End Date in EPOCH",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "StartDate",
+							"value": {
+								"value": "@adddays(startOfDay(utcnow()),-7)",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "Get_EndDate",
+						"type": "SetVariable",
+						"dependsOn": [
+							{
+								"activity": "Get Token",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "EPOCH_EndDate",
+							"value": {
+								"value": "@addhours(utcnow(),5)",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "Set Start Date in EPOCH",
+						"type": "SetVariable",
+						"dependsOn": [
+							{
+								"activity": "Get-Start Date",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "StartDate-EPOCH",
+							"value": {
+								"value": "@string(sub(div(ticks(variables('StartDate')),10000),div(ticks(pipeline().parameters.param_epoch),10000)))",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "Wait1",
+						"type": "Wait",
+						"dependsOn": [
+							{
+								"activity": "Get Excel Link",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"waitTimeInSeconds": 120
+						}
+					},
+					{
+						"name": "Get Excel Link_copy1",
+						"type": "WebActivity",
+						"dependsOn": [
+							{
+								"activity": "Wait1",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"url": " https://sleepyhead.unicommerce.com/services/rest/v1/export/job/status",
+							"method": "POST",
+							"headers": {
+								"Authorization": {
+									"value": "Bearer @{activity('Get Token').output.access_token}",
+									"type": "Expression"
+								}
+							},
+							"body": {
+								"value": "{\n    \"jobCode\": \"@{activity('Get Job Code').output.jobCode}\"\n}",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "Copy data IN-OUT",
+						"type": "Copy",
+						"dependsOn": [
+							{
+								"activity": "Copy ADLSGen2-Synapse",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "DelimitedTextSource",
+								"storeSettings": {
+									"type": "AzureBlobFSReadSettings",
+									"recursive": true,
+									"wildcardFolderPath": "Sleepyhead_Tally_Return_GST_Report/IN",
+									"wildcardFileName": "*.csv",
+									"enablePartitionDiscovery": false
+								},
+								"formatSettings": {
+									"type": "DelimitedTextReadSettings"
+								}
+							},
+							"sink": {
+								"type": "DelimitedTextSink",
+								"storeSettings": {
+									"type": "AzureBlobFSWriteSettings"
+								},
+								"formatSettings": {
+									"type": "DelimitedTextWriteSettings",
+									"quoteAllText": true,
+									"fileExtension": ".txt"
+								}
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"typeConversion": true,
+								"typeConversionSettings": {
+									"allowDataTruncation": true,
+									"treatBooleanAsNumber": false
+								}
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "DS_Copy_Unicomm_Sleepyhead_Tally_Return_GST_Report",
+								"type": "DatasetReference"
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "DS_OUT_Unicomm_Sleepyhead_Tally_Return_GST_Report",
+								"type": "DatasetReference"
+							}
+						]
+					},
+					{
+						"name": "Delete-IN",
+						"type": "Delete",
+						"dependsOn": [
+							{
+								"activity": "Copy data IN-OUT",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"dataset": {
+								"referenceName": "DS_Unicomm_Sleepyhead_Tally_Return_GST_Report_Delete",
+								"type": "DatasetReference"
+							},
+							"enableLogging": false,
+							"storeSettings": {
+								"type": "AzureBlobFSReadSettings",
+								"recursive": true,
+								"wildcardFileName": "*.csv",
+								"enablePartitionDiscovery": false
+							}
+						}
+					}
+				],
+				"parameters": {
+					"param_epoch": {
+						"type": "string",
+						"defaultValue": "1970-01-01T00:00:00Z"
+					}
+				},
+				"variables": {
+					"StartDate": {
+						"type": "String"
+					},
+					"EndDate": {
+						"type": "String"
+					},
+					"EPOCH_EndDate": {
+						"type": "String"
+					},
+					"StartDate-EPOCH": {
+						"type": "String"
+					},
+					"MyURL": {
+						"type": "String"
+					}
+				},
+				"folder": {
+					"name": "Unicomm-REST API"
+				},
+				"annotations": [],
+				"lastPublishTime": "2022-11-09T04:39:47Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/DS_Unicomm_Sleepyhead_Tally_Return_GST_Report')]",
+				"[concat(variables('factoryId'), '/datasets/DS_unicomm_Sleepyhead_Tally_GSTReport')]",
+				"[concat(variables('factoryId'), '/datasets/DS_Copy_Unicomm_Sleepyhead_Tally_Return_GST_Report')]",
+				"[concat(variables('factoryId'), '/datasets/DS_Unicomm_Sleepyhead_Tally_Return_GST')]",
+				"[concat(variables('factoryId'), '/datasets/DS_OUT_Unicomm_Sleepyhead_Tally_Return_GST_Report')]",
+				"[concat(variables('factoryId'), '/datasets/DS_Unicomm_Sleepyhead_Tally_Return_GST_Report_Delete')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_Unicomm_Sleepyhead_Tally_Return_GST_Report')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_Unicomm_Sleepyhead_Tally_Return_GST_Report')]",
+					"type": "LinkedServiceReference",
+					"parameters": {
+						"CSVBaseURL": {
+							"value": "@dataset().BaseURL",
+							"type": "Expression"
+						}
+					}
+				},
+				"parameters": {
+					"BaseURL": {
+						"type": "string",
+						"defaultValue": "https://unicommerce-export.s3.amazonaws.com/"
+					}
+				},
+				"annotations": [],
+				"type": "DelimitedText",
+				"typeProperties": {
+					"location": {
+						"type": "HttpServerLocation"
+					},
+					"columnDelimiter": ",",
+					"escapeChar": "\\",
+					"quoteChar": "\""
+				},
+				"schema": []
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_unicomm_Sleepyhead_Tally_GSTReport')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_ADLSG2_DFXGP_EDW01_STG')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "DelimitedText",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"fileName": {
+							"value": "Export-SleepyheadTallyGSTReport_@{convertTimeZone(utcnow(),'UTC','India Standard Time')}.csv",
+							"type": "Expression"
+						},
+						"folderPath": "Sleepyhead_Tally_GST_Report/IN",
+						"fileSystem": "fs-ci-dfxgp-unicomm"
+					},
+					"columnDelimiter": ",",
+					"escapeChar": "\\",
+					"quoteChar": "\""
+				},
+				"schema": []
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_Copy_Unicomm_Sleepyhead_Tally_Return_GST_Report')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_ADLSG2_DFXGP_EDW01_STG')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "DelimitedText",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"fileName": "Export-Sleepyhead Tally Return GST Report-sleepyhead_09112022094621.csv",
+						"folderPath": "Sleepyhead_Tally_Return_GST_Report/IN",
+						"fileSystem": "fs-ci-dfxgp-unicomm"
+					},
+					"columnDelimiter": ",",
+					"escapeChar": "\\",
+					"firstRowAsHeader": true,
+					"quoteChar": "\""
+				},
+				"schema": [
+					{
+						"name": "Date",
+						"type": "String"
+					},
+					{
+						"name": "Sale Order Number",
+						"type": "String"
+					},
+					{
+						"name": "Invoice number",
+						"type": "String"
+					},
+					{
+						"name": "Channel entry",
+						"type": "String"
+					},
+					{
+						"name": "Channel Ledger",
+						"type": "String"
+					},
+					{
+						"name": "Product Name",
+						"type": "String"
+					},
+					{
+						"name": "Product SKU Code",
+						"type": "String"
+					},
+					{
+						"name": "Qty",
+						"type": "String"
+					},
+					{
+						"name": "Unit Price",
+						"type": "String"
+					},
+					{
+						"name": "Currency",
+						"type": "String"
+					},
+					{
+						"name": "conversion rate",
+						"type": "String"
+					},
+					{
+						"name": "Total",
+						"type": "String"
+					},
+					{
+						"name": "Customer Name",
+						"type": "String"
+					},
+					{
+						"name": "Shipping Address Name",
+						"type": "String"
+					},
+					{
+						"name": "Shipping Address Line 1",
+						"type": "String"
+					},
+					{
+						"name": "Shipping Address Line 2",
+						"type": "String"
+					},
+					{
+						"name": "Shipping Address City",
+						"type": "String"
+					},
+					{
+						"name": "Shipping Address State",
+						"type": "String"
+					},
+					{
+						"name": "Shipping Address Country",
+						"type": "String"
+					},
+					{
+						"name": "Shipping Address Pincode",
+						"type": "String"
+					},
+					{
+						"name": "Shipping Address Phone",
+						"type": "String"
+					},
+					{
+						"name": "Shipping Provider",
+						"type": "String"
+					},
+					{
+						"name": "AWB num",
+						"type": "String"
+					},
+					{
+						"name": "Sales",
+						"type": "String"
+					},
+					{
+						"name": "Sales Ledger",
+						"type": "String"
+					},
+					{
+						"name": "CGST",
+						"type": "String"
+					},
+					{
+						"name": "CGST Rate",
+						"type": "String"
+					},
+					{
+						"name": "SGST",
+						"type": "String"
+					},
+					{
+						"name": "SGST Rate",
+						"type": "String"
+					},
+					{
+						"name": "IGST",
+						"type": "String"
+					},
+					{
+						"name": "IGST Rate",
+						"type": "String"
+					},
+					{
+						"name": "UTGST",
+						"type": "String"
+					},
+					{
+						"name": "UTGST Rate",
+						"type": "String"
+					},
+					{
+						"name": "CESS",
+						"type": "String"
+					},
+					{
+						"name": "CESS Rate",
+						"type": "String"
+					},
+					{
+						"name": "Other charges",
+						"type": "String"
+					},
+					{
+						"name": "Other charges Ledger",
+						"type": "String"
+					},
+					{
+						"name": "Other charges1",
+						"type": "String"
+					},
+					{
+						"name": "Other charges Ledger1",
+						"type": "String"
+					},
+					{
+						"name": "Service tax",
+						"type": "String"
+					},
+					{
+						"name": "ST Ledger",
+						"type": "String"
+					},
+					{
+						"name": "Discount Ledger",
+						"type": "String"
+					},
+					{
+						"name": "Discount Amount",
+						"type": "String"
+					},
+					{
+						"name": "IMEI",
+						"type": "String"
+					},
+					{
+						"name": "Godown",
+						"type": "String"
+					},
+					{
+						"name": "Dispatch Date/Cancellation Date",
+						"type": "String"
+					},
+					{
+						"name": "Narration",
+						"type": "String"
+					},
+					{
+						"name": "Entity",
+						"type": "String"
+					},
+					{
+						"name": "Voucher Type Name ",
+						"type": "String"
+					},
+					{
+						"name": "TIN NO",
+						"type": "String"
+					},
+					{
+						"name": "Original Invoice Date ",
+						"type": "String"
+					},
+					{
+						"name": "Original Invoice No",
+						"type": "String"
+					},
+					{
+						"name": "Invoice Channel Created",
+						"type": "String"
+					},
+					{
+						"name": "Channel State",
+						"type": "String"
+					},
+					{
+						"name": "Channel_Party GSTIN",
+						"type": "String"
+					},
+					{
+						"name": "Customer GSTIN",
+						"type": "String"
+					},
+					{
+						"name": "Billing Party Code",
+						"type": "String"
+					},
+					{
+						"name": "Tax Verification",
+						"type": "String"
+					},
+					{
+						"name": "GST Registration Type",
+						"type": "String"
+					},
+					{
+						"name": "RP Code",
+						"type": "String"
+					}
+				]
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_Unicomm_Sleepyhead_Tally_Return_GST')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_AzSynapse_DFXGP_EDW01')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "AzureSqlDWTable",
+				"schema": [
+					{
+						"name": "Date",
+						"type": "datetime",
+						"precision": 23,
+						"scale": 3
+					},
+					{
+						"name": "Sale Order Number",
+						"type": "varchar"
+					},
+					{
+						"name": "Invoice number",
+						"type": "varchar"
+					},
+					{
+						"name": "Channel entry",
+						"type": "varchar"
+					},
+					{
+						"name": "Channel Ledger",
+						"type": "varchar"
+					},
+					{
+						"name": "Product Name",
+						"type": "varchar"
+					},
+					{
+						"name": "Product SKU Code",
+						"type": "varchar"
+					},
+					{
+						"name": "Qty",
+						"type": "varchar"
+					},
+					{
+						"name": "Unit Price",
+						"type": "varchar"
+					},
+					{
+						"name": "Currency",
+						"type": "varchar"
+					},
+					{
+						"name": "conversion rate",
+						"type": "varchar"
+					},
+					{
+						"name": "Total",
+						"type": "varchar"
+					},
+					{
+						"name": "Customer Name",
+						"type": "varchar"
+					},
+					{
+						"name": "Shipping Address Name",
+						"type": "varchar"
+					},
+					{
+						"name": "Shipping Address Line 1",
+						"type": "varchar"
+					},
+					{
+						"name": "Shipping Address Line 2",
+						"type": "varchar"
+					},
+					{
+						"name": "Shipping Address City",
+						"type": "varchar"
+					},
+					{
+						"name": "Shipping Address State",
+						"type": "varchar"
+					},
+					{
+						"name": "Shipping Address Country",
+						"type": "varchar"
+					},
+					{
+						"name": "Shipping Address Pincode",
+						"type": "varchar"
+					},
+					{
+						"name": "Shipping Address Phone",
+						"type": "varchar"
+					},
+					{
+						"name": "Shipping Provider",
+						"type": "varchar"
+					},
+					{
+						"name": "AWB num",
+						"type": "varchar"
+					},
+					{
+						"name": "Sales",
+						"type": "varchar"
+					},
+					{
+						"name": "Sales Ledger",
+						"type": "varchar"
+					},
+					{
+						"name": "CGST",
+						"type": "varchar"
+					},
+					{
+						"name": "CGST Rate",
+						"type": "varchar"
+					},
+					{
+						"name": "SGST",
+						"type": "varchar"
+					},
+					{
+						"name": "SGST Rate",
+						"type": "varchar"
+					},
+					{
+						"name": "IGST",
+						"type": "varchar"
+					},
+					{
+						"name": "IGST Rate",
+						"type": "varchar"
+					},
+					{
+						"name": "UTGST",
+						"type": "varchar"
+					},
+					{
+						"name": "UTGST Rate",
+						"type": "varchar"
+					},
+					{
+						"name": "CESS",
+						"type": "varchar"
+					},
+					{
+						"name": "CESS Rate",
+						"type": "varchar"
+					},
+					{
+						"name": "Other charges",
+						"type": "varchar"
+					},
+					{
+						"name": "Other charges Ledger",
+						"type": "varchar"
+					},
+					{
+						"name": "Other charges1",
+						"type": "varchar"
+					},
+					{
+						"name": "Other charges Ledger1",
+						"type": "varchar"
+					},
+					{
+						"name": "Service tax",
+						"type": "varchar"
+					},
+					{
+						"name": "ST Ledger",
+						"type": "varchar"
+					},
+					{
+						"name": "Discount Ledger",
+						"type": "varchar"
+					},
+					{
+						"name": "Discount Amount",
+						"type": "varchar"
+					},
+					{
+						"name": "IMEI",
+						"type": "varchar"
+					},
+					{
+						"name": "Godown",
+						"type": "varchar"
+					},
+					{
+						"name": "Dispatch Date/Cancellation Date",
+						"type": "varchar"
+					},
+					{
+						"name": "Narration",
+						"type": "varchar"
+					},
+					{
+						"name": "Entity",
+						"type": "varchar"
+					},
+					{
+						"name": "Voucher Type Name",
+						"type": "varchar"
+					},
+					{
+						"name": "TIN NO",
+						"type": "varchar"
+					},
+					{
+						"name": "Original Invoice Date",
+						"type": "varchar"
+					},
+					{
+						"name": "Original Invoice No",
+						"type": "varchar"
+					},
+					{
+						"name": "Channel Invoice Created",
+						"type": "varchar"
+					},
+					{
+						"name": "Channel State",
+						"type": "varchar"
+					},
+					{
+						"name": "Channel_Party GSTIN",
+						"type": "varchar"
+					},
+					{
+						"name": "Customer GSTIN",
+						"type": "varchar"
+					},
+					{
+						"name": "Billing Party Code",
+						"type": "varchar"
+					},
+					{
+						"name": "TAX VerificationB",
+						"type": "varchar"
+					},
+					{
+						"name": "GST Registration Type",
+						"type": "varchar"
+					},
+					{
+						"name": "RP Code",
+						"type": "varchar"
+					},
+					{
+						"name": "FileName",
+						"type": "varchar"
+					},
+					{
+						"name": "FilePath",
+						"type": "varchar"
+					},
+					{
+						"name": "ETLLoadDate",
+						"type": "varchar"
+					}
+				],
+				"typeProperties": {
+					"schema": "STG_Duroflex_BI",
+					"table": "STG_Unicommerce_Sleepyhead_Tally_Return_GST_Report"
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_OUT_Unicomm_Sleepyhead_Tally_Return_GST_Report')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_ADLSG2_DFXGP_EDW01_STG')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "DelimitedText",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"folderPath": "Sleepyhead_Tally_Return_GST_Report/OUT",
+						"fileSystem": "fs-ci-dfxgp-unicomm"
+					},
+					"columnDelimiter": ",",
+					"escapeChar": "\\",
+					"quoteChar": "\""
+				},
+				"schema": []
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_Unicomm_Sleepyhead_Tally_Return_GST_Report_Delete')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_ADLSG2_DFXGP_EDW01_STG')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "Binary",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"folderPath": "Sleepyhead_Tally_Return_GST_Report/IN",
+						"fileSystem": "fs-ci-dfxgp-unicomm"
+					}
+				}
+			},
+			"dependsOn": []
+		}
+	]
+}
