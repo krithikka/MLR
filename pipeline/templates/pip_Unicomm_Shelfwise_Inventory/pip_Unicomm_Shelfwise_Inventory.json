@@ -1,0 +1,1328 @@
+{
+	"$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"factoryName": {
+			"type": "string",
+			"metadata": "Data Factory name"
+		},
+		"LS_AzSynapse_DFXGP_EDW01": {
+			"type": "string"
+		},
+		"LS_Unicomm_Shelfwise_Inventory": {
+			"type": "string"
+		},
+		"LS_ADLSG2_DFXGP_EDW01_STG": {
+			"type": "string"
+		}
+	},
+	"variables": {
+		"factoryId": "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]"
+	},
+	"resources": [
+		{
+			"name": "[concat(parameters('factoryName'), '/pip_Unicomm_Shelfwise_Inventory')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Lookup1",
+						"type": "Lookup",
+						"dependsOn": [
+							{
+								"activity": "Truncate Shelfwise_Inventory",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "SqlDWSource",
+								"queryTimeout": "02:00:00",
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DS_Synapse_Unicomm_Shelfwise_Inventory",
+								"type": "DatasetReference"
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "Lookup1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('Lookup1').output.value",
+								"type": "Expression"
+							},
+							"isSequential": true,
+							"activities": [
+								{
+									"name": "Get Token",
+									"type": "WebActivity",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"url": "https://sleepyhead.unicommerce.com/oauth/token?grant_type=password&client_id=my-trusted-client&username=analytics@mysleepyhead.com&password=Unisleepy@123",
+										"method": "GET"
+									}
+								},
+								{
+									"name": "Get Job Code",
+									"type": "WebActivity",
+									"dependsOn": [
+										{
+											"activity": "Get Token",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"url": "https://sleepyhead.unicommerce.com/services/rest/v1/export/job/create",
+										"method": "POST",
+										"headers": {
+											"Authorization": {
+												"value": "Bearer @{activity('Get Token').output.access_token}",
+												"type": "Expression"
+											},
+											"Facility": {
+												"value": "@item().Facility",
+												"type": "Expression"
+											}
+										},
+										"body": {
+											"value": "{\n    \"exportJobTypeName\": \"Shelfwise Inventory\",\n    \"exportColums\": [\n        \"facility\", \"skuCode\", \"itemTypeName\", \"inventoryType\", \n\t\t\"shelf\", \"quantity\", \"quantityBlocked\", \"quantityNotFound\", \n\t\t\"quantityDamaged\", \"priority\", \"section\", \"batchCode\", \"expiry\"\n    ],\n    \"frequency\": \"ONETIME\"\n}",
+											"type": "Expression"
+										}
+									}
+								},
+								{
+									"name": "Get Excel Link",
+									"type": "WebActivity",
+									"dependsOn": [
+										{
+											"activity": "Get Job Code",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"url": " https://sleepyhead.unicommerce.com/services/rest/v1/export/job/status",
+										"method": "POST",
+										"headers": {
+											"Authorization": {
+												"value": "Bearer @{activity('Get Token').output.access_token}",
+												"type": "Expression"
+											}
+										},
+										"body": {
+											"value": "{\n    \"jobCode\": \"@{activity('Get Job Code').output.jobCode}\"\n}",
+											"type": "Expression"
+										}
+									}
+								},
+								{
+									"name": "Set variable1-Excel Link",
+									"type": "SetVariable",
+									"dependsOn": [
+										{
+											"activity": "Get Excel Link_copy2",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "MyURL",
+										"value": {
+											"value": "@{activity('Get Excel Link_copy2').output.filePath}",
+											"type": "Expression"
+										}
+									}
+								},
+								{
+									"name": "CopyExcelData",
+									"type": "Copy",
+									"dependsOn": [
+										{
+											"activity": "Set variable1-Excel Link",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "DelimitedTextSource",
+											"storeSettings": {
+												"type": "HttpReadSettings",
+												"requestMethod": "GET"
+											},
+											"formatSettings": {
+												"type": "DelimitedTextReadSettings"
+											}
+										},
+										"sink": {
+											"type": "DelimitedTextSink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings"
+											},
+											"formatSettings": {
+												"type": "DelimitedTextWriteSettings",
+												"quoteAllText": true,
+												"fileExtension": ".csv"
+											}
+										},
+										"enableStaging": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"typeConversion": true,
+											"typeConversionSettings": {
+												"allowDataTruncation": true,
+												"treatBooleanAsNumber": false
+											}
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "DS_Unicomm_Shelfwise_Inventory",
+											"type": "DatasetReference",
+											"parameters": {
+												"BaseURL": {
+													"value": "@variables('MyURL')",
+													"type": "Expression"
+												}
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DS_ADLSGen2_Unicommerce_Shelfwise_Inventory",
+											"type": "DatasetReference"
+										}
+									]
+								},
+								{
+									"name": "Copy ADLSGen2-Synapse",
+									"type": "Copy",
+									"dependsOn": [
+										{
+											"activity": "CopyExcelData",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "DelimitedTextSource",
+											"additionalColumns": [
+												{
+													"name": "FileName",
+													"value": "$$FILEPATH"
+												},
+												{
+													"name": "ETLLoadDate",
+													"value": {
+														"value": "@utcnow()",
+														"type": "Expression"
+													}
+												},
+												{
+													"name": "FilePath",
+													"value": {
+														"value": "\"ShelfwiseInventory/IN/\"",
+														"type": "Expression"
+													}
+												}
+											],
+											"storeSettings": {
+												"type": "AzureBlobFSReadSettings",
+												"recursive": true,
+												"wildcardFolderPath": "ShelfwiseInventory/IN",
+												"wildcardFileName": "*.csv",
+												"enablePartitionDiscovery": false
+											},
+											"formatSettings": {
+												"type": "DelimitedTextReadSettings"
+											}
+										},
+										"sink": {
+											"type": "SqlDWSink",
+											"writeBehavior": "Insert",
+											"disableMetricsCollection": false
+										},
+										"enableStaging": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"mappings": [
+												{
+													"source": {
+														"name": "Facility",
+														"type": "String"
+													},
+													"sink": {
+														"name": "Facility",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"name": "Item Type SKU Code",
+														"type": "String"
+													},
+													"sink": {
+														"name": "Item Type SKU Code",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"name": "Item Type Name",
+														"type": "String"
+													},
+													"sink": {
+														"name": "Item Type Name",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"name": "Inventory Type",
+														"type": "String"
+													},
+													"sink": {
+														"name": "Inventory Type",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"name": "Shelf",
+														"type": "String"
+													},
+													"sink": {
+														"name": "Shelf",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"name": "Quantity",
+														"type": "String"
+													},
+													"sink": {
+														"name": "Quantity",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"name": "Quantity Blocked",
+														"type": "String"
+													},
+													"sink": {
+														"name": "Quantity Blocked",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"name": "Quantity Not Found",
+														"type": "String"
+													},
+													"sink": {
+														"name": "Quantity Not Found",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"name": "Quantity Damaged",
+														"type": "String"
+													},
+													"sink": {
+														"name": "Quantity Damaged",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"name": "Priority",
+														"type": "String"
+													},
+													"sink": {
+														"name": "Priority",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"name": "Section",
+														"type": "String"
+													},
+													"sink": {
+														"name": "Section",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"name": "Batch Code",
+														"type": "String"
+													},
+													"sink": {
+														"name": "Batch Code",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"name": "Expiry",
+														"type": "String"
+													},
+													"sink": {
+														"name": "Expiry",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"name": "FilePath",
+														"type": "String"
+													},
+													"sink": {
+														"name": "FilePath",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"name": "FileName",
+														"type": "String"
+													},
+													"sink": {
+														"name": "FileName",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"name": "ETLLoadDate",
+														"type": "String"
+													},
+													"sink": {
+														"name": "ETLLoadDate",
+														"type": "String"
+													}
+												}
+											]
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "DS_Copy_ADLSGen2_Unicomm_ShelfwiseInventory",
+											"type": "DatasetReference"
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "LS_Sink_Unicomm_ShelfwiseInventory",
+											"type": "DatasetReference"
+										}
+									]
+								},
+								{
+									"name": "Copy data IN-OUT",
+									"type": "Copy",
+									"dependsOn": [
+										{
+											"activity": "Copy ADLSGen2-Synapse",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "DelimitedTextSource",
+											"storeSettings": {
+												"type": "AzureBlobFSReadSettings",
+												"recursive": true,
+												"wildcardFolderPath": "ShelfwiseInventory/IN",
+												"wildcardFileName": "*.csv",
+												"enablePartitionDiscovery": false
+											},
+											"formatSettings": {
+												"type": "DelimitedTextReadSettings"
+											}
+										},
+										"sink": {
+											"type": "DelimitedTextSink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings"
+											},
+											"formatSettings": {
+												"type": "DelimitedTextWriteSettings",
+												"quoteAllText": true,
+												"fileExtension": ".txt"
+											}
+										},
+										"enableStaging": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"mappings": [
+												{
+													"source": {
+														"name": "Facility",
+														"type": "String",
+														"physicalType": "String"
+													},
+													"sink": {
+														"name": "Facility",
+														"type": "String",
+														"physicalType": "String"
+													}
+												},
+												{
+													"source": {
+														"name": "Item Type SKU Code",
+														"type": "String",
+														"physicalType": "String"
+													},
+													"sink": {
+														"name": "Item Type SKU Code",
+														"type": "String",
+														"physicalType": "String"
+													}
+												},
+												{
+													"source": {
+														"name": "Item Type Name",
+														"type": "String",
+														"physicalType": "String"
+													},
+													"sink": {
+														"name": "Item Type Name",
+														"type": "String",
+														"physicalType": "String"
+													}
+												},
+												{
+													"source": {
+														"name": "Inventory Type",
+														"type": "String",
+														"physicalType": "String"
+													},
+													"sink": {
+														"name": "Inventory Type",
+														"type": "String",
+														"physicalType": "String"
+													}
+												},
+												{
+													"source": {
+														"name": "Shelf",
+														"type": "String",
+														"physicalType": "String"
+													},
+													"sink": {
+														"name": "Shelf",
+														"type": "String",
+														"physicalType": "String"
+													}
+												},
+												{
+													"source": {
+														"name": "Quantity",
+														"type": "String",
+														"physicalType": "String"
+													},
+													"sink": {
+														"name": "Quantity",
+														"type": "String",
+														"physicalType": "String"
+													}
+												},
+												{
+													"source": {
+														"name": "Quantity Blocked",
+														"type": "String",
+														"physicalType": "String"
+													},
+													"sink": {
+														"name": "Quantity Blocked",
+														"type": "String",
+														"physicalType": "String"
+													}
+												},
+												{
+													"source": {
+														"name": "Quantity Not Found",
+														"type": "String",
+														"physicalType": "String"
+													},
+													"sink": {
+														"name": "Quantity Not Found",
+														"type": "String",
+														"physicalType": "String"
+													}
+												},
+												{
+													"source": {
+														"name": "Quantity Damaged",
+														"type": "String",
+														"physicalType": "String"
+													},
+													"sink": {
+														"name": "Quantity Damaged",
+														"type": "String",
+														"physicalType": "String"
+													}
+												},
+												{
+													"source": {
+														"name": "Priority",
+														"type": "String",
+														"physicalType": "String"
+													},
+													"sink": {
+														"name": "Priority",
+														"type": "String",
+														"physicalType": "String"
+													}
+												},
+												{
+													"source": {
+														"name": "Section",
+														"type": "String",
+														"physicalType": "String"
+													},
+													"sink": {
+														"name": "Section",
+														"type": "String",
+														"physicalType": "String"
+													}
+												},
+												{
+													"source": {
+														"name": "Batch Code",
+														"type": "String",
+														"physicalType": "String"
+													},
+													"sink": {
+														"name": "Batch Code",
+														"type": "String",
+														"physicalType": "String"
+													}
+												},
+												{
+													"source": {
+														"name": "Expiry",
+														"type": "String",
+														"physicalType": "String"
+													},
+													"sink": {
+														"name": "Expiry",
+														"type": "String",
+														"physicalType": "String"
+													}
+												}
+											],
+											"typeConversion": true,
+											"typeConversionSettings": {
+												"allowDataTruncation": true,
+												"treatBooleanAsNumber": false
+											}
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "DS_Copy_ADLSGen2_Unicomm_ShelfwiseInventory",
+											"type": "DatasetReference"
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DS_Copy_Out_Unicomm_ShelfwiseInventory",
+											"type": "DatasetReference"
+										}
+									]
+								},
+								{
+									"name": "Delete-IN",
+									"type": "Delete",
+									"dependsOn": [
+										{
+											"activity": "Copy data IN-OUT",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"dataset": {
+											"referenceName": "DS_Unicomm_ShelfwiseInventory_Delete_IN",
+											"type": "DatasetReference"
+										},
+										"enableLogging": false,
+										"storeSettings": {
+											"type": "AzureBlobFSReadSettings",
+											"recursive": true,
+											"wildcardFileName": "*.csv",
+											"enablePartitionDiscovery": false
+										}
+									}
+								},
+								{
+									"name": "Wait1",
+									"type": "Wait",
+									"dependsOn": [
+										{
+											"activity": "Get Excel Link",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"userProperties": [],
+									"typeProperties": {
+										"waitTimeInSeconds": 120
+									}
+								},
+								{
+									"name": "Get Excel Link_copy2",
+									"type": "WebActivity",
+									"dependsOn": [
+										{
+											"activity": "Wait1",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"url": " https://sleepyhead.unicommerce.com/services/rest/v1/export/job/status",
+										"method": "POST",
+										"headers": {
+											"Authorization": {
+												"value": "Bearer @{activity('Get Token').output.access_token}",
+												"type": "Expression"
+											}
+										},
+										"body": {
+											"value": "{\n    \"jobCode\": \"@{activity('Get Job Code').output.jobCode}\"\n}",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						}
+					},
+					{
+						"name": "Truncate Shelfwise_Inventory",
+						"type": "SqlServerStoredProcedure",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"storedProcedureName": "[[STG_Duroflex_BI].[STG_Unicommerce_Shelfwise_Inventory_SP]"
+						},
+						"linkedServiceName": {
+							"referenceName": "[parameters('LS_AzSynapse_DFXGP_EDW01')]",
+							"type": "LinkedServiceReference"
+						}
+					}
+				],
+				"variables": {
+					"MyURL": {
+						"type": "String"
+					},
+					"StartDate": {
+						"type": "String"
+					},
+					"EndDate": {
+						"type": "String"
+					},
+					"EPOCH_EndDate": {
+						"type": "String"
+					},
+					"StartDate-EPOCH": {
+						"type": "String"
+					},
+					"Facilityvalue": {
+						"type": "String"
+					},
+					"Facility1": {
+						"type": "Array"
+					},
+					"Itemvaluefor": {
+						"type": "String"
+					}
+				},
+				"folder": {
+					"name": "Unicomm-REST API"
+				},
+				"annotations": [],
+				"lastPublishTime": "2022-11-08T14:49:52Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/DS_Synapse_Unicomm_Shelfwise_Inventory')]",
+				"[concat(variables('factoryId'), '/datasets/DS_Unicomm_Shelfwise_Inventory')]",
+				"[concat(variables('factoryId'), '/datasets/DS_ADLSGen2_Unicommerce_Shelfwise_Inventory')]",
+				"[concat(variables('factoryId'), '/datasets/DS_Copy_ADLSGen2_Unicomm_ShelfwiseInventory')]",
+				"[concat(variables('factoryId'), '/datasets/LS_Sink_Unicomm_ShelfwiseInventory')]",
+				"[concat(variables('factoryId'), '/datasets/DS_Copy_Out_Unicomm_ShelfwiseInventory')]",
+				"[concat(variables('factoryId'), '/datasets/DS_Unicomm_ShelfwiseInventory_Delete_IN')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_Synapse_Unicomm_Shelfwise_Inventory')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_AzSynapse_DFXGP_EDW01')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "AzureSqlDWTable",
+				"schema": [
+					{
+						"name": "Facility",
+						"type": "varchar"
+					}
+				],
+				"typeProperties": {
+					"schema": "STG_Duroflex_BI",
+					"table": "STG_Unicommerce_Facility"
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_Unicomm_Shelfwise_Inventory')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_Unicomm_Shelfwise_Inventory')]",
+					"type": "LinkedServiceReference",
+					"parameters": {
+						"CSVBaseURL": {
+							"value": "@dataset().BaseURL",
+							"type": "Expression"
+						}
+					}
+				},
+				"parameters": {
+					"BaseURL": {
+						"type": "string",
+						"defaultValue": "https://unicommerce-export.s3.amazonaws.com/"
+					}
+				},
+				"annotations": [],
+				"type": "DelimitedText",
+				"typeProperties": {
+					"location": {
+						"type": "HttpServerLocation"
+					},
+					"columnDelimiter": ",",
+					"escapeChar": "\\",
+					"firstRowAsHeader": true,
+					"quoteChar": "\""
+				},
+				"schema": [
+					{
+						"name": "Facility",
+						"type": "String"
+					},
+					{
+						"name": "Item Type SKU Code",
+						"type": "String"
+					},
+					{
+						"name": "Item Type Name",
+						"type": "String"
+					},
+					{
+						"name": "Inventory Type",
+						"type": "String"
+					},
+					{
+						"name": "Shelf",
+						"type": "String"
+					},
+					{
+						"name": "Quantity",
+						"type": "String"
+					},
+					{
+						"name": "Quantity Blocked",
+						"type": "String"
+					},
+					{
+						"name": "Quantity Not Found",
+						"type": "String"
+					},
+					{
+						"name": "Quantity Damaged",
+						"type": "String"
+					},
+					{
+						"name": "Priority",
+						"type": "String"
+					},
+					{
+						"name": "Section",
+						"type": "String"
+					},
+					{
+						"name": "Batch Code",
+						"type": "String"
+					},
+					{
+						"name": "Expiry",
+						"type": "String"
+					}
+				]
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_ADLSGen2_Unicommerce_Shelfwise_Inventory')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_ADLSG2_DFXGP_EDW01_STG')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "DelimitedText",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"fileName": "Export-Shelfwise Inventory-sleepyhead_08112022135459.csv",
+						"folderPath": "ShelfwiseInventory/IN",
+						"fileSystem": "fs-ci-dfxgp-unicomm"
+					},
+					"columnDelimiter": ",",
+					"escapeChar": "\\",
+					"firstRowAsHeader": true,
+					"quoteChar": "\""
+				},
+				"schema": [
+					{
+						"name": "Facility",
+						"type": "String"
+					},
+					{
+						"name": "Item Type SKU Code",
+						"type": "String"
+					},
+					{
+						"name": "Item Type Name",
+						"type": "String"
+					},
+					{
+						"name": "Inventory Type",
+						"type": "String"
+					},
+					{
+						"name": "Shelf",
+						"type": "String"
+					},
+					{
+						"name": "Quantity",
+						"type": "String"
+					},
+					{
+						"name": "Quantity Blocked",
+						"type": "String"
+					},
+					{
+						"name": "Quantity Not Found",
+						"type": "String"
+					},
+					{
+						"name": "Quantity Damaged",
+						"type": "String"
+					},
+					{
+						"name": "Priority",
+						"type": "String"
+					},
+					{
+						"name": "Section",
+						"type": "String"
+					},
+					{
+						"name": "Batch Code",
+						"type": "String"
+					},
+					{
+						"name": "Expiry",
+						"type": "String"
+					}
+				]
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_Copy_ADLSGen2_Unicomm_ShelfwiseInventory')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_ADLSG2_DFXGP_EDW01_STG')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "DelimitedText",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"folderPath": "ShelfwiseInventory/IN",
+						"fileSystem": "fs-ci-dfxgp-unicomm"
+					},
+					"columnDelimiter": ",",
+					"escapeChar": "\"",
+					"firstRowAsHeader": true,
+					"quoteChar": "\""
+				},
+				"schema": [
+					{
+						"name": "Facility",
+						"type": "String"
+					},
+					{
+						"name": "Item Type SKU Code",
+						"type": "String"
+					},
+					{
+						"name": "Item Type Name",
+						"type": "String"
+					},
+					{
+						"name": "Inventory Type",
+						"type": "String"
+					},
+					{
+						"name": "Shelf",
+						"type": "String"
+					},
+					{
+						"name": "Quantity",
+						"type": "String"
+					},
+					{
+						"name": "Quantity Blocked",
+						"type": "String"
+					},
+					{
+						"name": "Quantity Not Found",
+						"type": "String"
+					},
+					{
+						"name": "Quantity Damaged",
+						"type": "String"
+					},
+					{
+						"name": "Priority",
+						"type": "String"
+					},
+					{
+						"name": "Section",
+						"type": "String"
+					},
+					{
+						"name": "Batch Code",
+						"type": "String"
+					},
+					{
+						"name": "Expiry",
+						"type": "String"
+					}
+				]
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/LS_Sink_Unicomm_ShelfwiseInventory')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_AzSynapse_DFXGP_EDW01')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "AzureSqlDWTable",
+				"schema": [
+					{
+						"name": "Facility",
+						"type": "varchar"
+					},
+					{
+						"name": "Item Type SKU Code",
+						"type": "varchar"
+					},
+					{
+						"name": "Item Type Name",
+						"type": "varchar"
+					},
+					{
+						"name": "Inventory Type",
+						"type": "varchar"
+					},
+					{
+						"name": "Shelf",
+						"type": "varchar"
+					},
+					{
+						"name": "Quantity",
+						"type": "varchar"
+					},
+					{
+						"name": "Quantity Blocked",
+						"type": "varchar"
+					},
+					{
+						"name": "Quantity Not Found",
+						"type": "varchar"
+					},
+					{
+						"name": "Quantity Damaged",
+						"type": "varchar"
+					},
+					{
+						"name": "Priority",
+						"type": "varchar"
+					},
+					{
+						"name": "Section",
+						"type": "varchar"
+					},
+					{
+						"name": "Batch Code",
+						"type": "varchar"
+					},
+					{
+						"name": "Expiry",
+						"type": "varchar"
+					},
+					{
+						"name": "FilePath",
+						"type": "varchar"
+					},
+					{
+						"name": "FileName",
+						"type": "varchar"
+					},
+					{
+						"name": "ETLLoadDate",
+						"type": "varchar"
+					}
+				],
+				"typeProperties": {
+					"schema": "STG_Duroflex_BI",
+					"table": "STG_Unicommerce_Shelfwise_Inventory"
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_Copy_Out_Unicomm_ShelfwiseInventory')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_ADLSG2_DFXGP_EDW01_STG')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "DelimitedText",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"folderPath": "ShelfwiseInventory/OUT",
+						"fileSystem": "fs-ci-dfxgp-unicomm"
+					},
+					"columnDelimiter": ",",
+					"escapeChar": "\\",
+					"firstRowAsHeader": true,
+					"quoteChar": "\""
+				},
+				"schema": [
+					{
+						"name": "Facility",
+						"type": "String"
+					},
+					{
+						"name": "Item Type SKU Code",
+						"type": "String"
+					},
+					{
+						"name": "Item Type Name",
+						"type": "String"
+					},
+					{
+						"name": "Inventory Type",
+						"type": "String"
+					},
+					{
+						"name": "Shelf",
+						"type": "String"
+					},
+					{
+						"name": "Quantity",
+						"type": "String"
+					},
+					{
+						"name": "Quantity Blocked",
+						"type": "String"
+					},
+					{
+						"name": "Quantity Not Found",
+						"type": "String"
+					},
+					{
+						"name": "Quantity Damaged",
+						"type": "String"
+					},
+					{
+						"name": "Priority",
+						"type": "String"
+					},
+					{
+						"name": "Section",
+						"type": "String"
+					},
+					{
+						"name": "Batch Code",
+						"type": "String"
+					},
+					{
+						"name": "Expiry",
+						"type": "String"
+					}
+				]
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_Unicomm_ShelfwiseInventory_Delete_IN')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_ADLSG2_DFXGP_EDW01_STG')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "Binary",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"folderPath": "ShelfwiseInventory/IN",
+						"fileSystem": "fs-ci-dfxgp-unicomm"
+					}
+				}
+			},
+			"dependsOn": []
+		}
+	]
+}
