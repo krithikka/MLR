@@ -1,0 +1,9 @@
+{
+	"name": "krithi",
+	"location": "centralindia",
+	"identity": {
+		"type": "SystemAssigned",
+		"principalId": "3729e7fd-401d-411c-9da5-90483a486012",
+		"tenantId": "a99a1e61-d69c-4458-9bca-b9857e258772"
+	}
+}
