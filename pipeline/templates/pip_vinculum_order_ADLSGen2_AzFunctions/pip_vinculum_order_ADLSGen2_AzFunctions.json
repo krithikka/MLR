@@ -1,0 +1,2950 @@
+{
+	"$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"factoryName": {
+			"type": "string",
+			"metadata": "Data Factory name"
+		},
+		"LS_ADLSG2_DFXGP_EDW01_STG": {
+			"type": "string"
+		},
+		"LS_AzSynapse_DFXGP_EDW01": {
+			"type": "string"
+		},
+		"LS_Vinculum_AzFunction": {
+			"type": "string"
+		}
+	},
+	"variables": {
+		"factoryId": "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]"
+	},
+	"resources": [
+		{
+			"name": "[concat(parameters('factoryName'), '/pip_vinculum_order_ADLSGen2_AzFunctions')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Web1",
+						"type": "WebActivity",
+						"dependsOn": [
+							{
+								"activity": "Set End Date",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"url": "https://duroflex.vineretail.com/RestWS/api/eretail/v1/order/orderPull",
+							"method": "POST",
+							"headers": {
+								"Content-Type": {
+									"value": "application/x-www-form-urlencoded",
+									"type": "Expression"
+								}
+							},
+							"body": {
+								"value": "@concat('ApiOwner=Shrijit&ApiKey=754b261806fe43339313c224ab7603a87b9a5f0d518548de9d3de29&RequestBody={\"orderNo\":\"\",\"fromDate\":\"',variables('FromDate'),'\",\"toDate\":\"',variables('EndDate'),'\",\"pageNumber\":2,\"order_Location\":\"\",\"IsReplacementOrder\":\"\",\"orderSource\":\"\",\"filterBy\":1,\"fulfillmentLocation\":\"\",\"reqType\":\"\"}')",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "Web1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@range(1,activity('Web1').output.totalPages)",
+								"type": "Expression"
+							},
+							"isSequential": true,
+							"activities": [
+								{
+									"name": "Web2",
+									"type": "WebActivity",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"url": "https://duroflex.vineretail.com/RestWS/api/eretail/v1/order/orderPull",
+										"method": "POST",
+										"headers": {
+											"Content-Type": "application/x-www-form-urlencoded"
+										},
+										"body": {
+											"value": "@concat('ApiOwner=Shrijit&ApiKey=754b261806fe43339313c224ab7603a87b9a5f0d518548de9d3de29&RequestBody={\"orderNo\":\"\",\"fromDate\":\"',variables('FromDate'),'\",\"toDate\":\"',variables('EndDate'),'\",\"pageNumber\":',item(),',\"order_Location\":\"\",\"IsReplacementOrder\":\"\",\"orderSource\":\"\",\"filterBy\":1,\"fulfillmentLocation\":\"\",\"reqType\":\"\"}')",
+											"type": "Expression"
+										}
+									}
+								},
+								{
+									"name": "Copy IN as JSON",
+									"type": "Copy",
+									"dependsOn": [
+										{
+											"activity": "Web2",
+											"dependencyConditions": [
+												"Completed"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "RestSource",
+											"httpRequestTimeout": "00:01:40",
+											"requestInterval": "00.00:00:00.010",
+											"requestMethod": "POST",
+											"requestBody": {
+												"value": "@string(activity('Web2').output)",
+												"type": "Expression"
+											},
+											"paginationRules": {
+												"supportRFC5988": "true"
+											}
+										},
+										"sink": {
+											"type": "JsonSink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings"
+											},
+											"formatSettings": {
+												"type": "JsonWriteSettings"
+											}
+										},
+										"enableStaging": false
+									},
+									"inputs": [
+										{
+											"referenceName": "Vinculum_REST_ForEach",
+											"type": "DatasetReference"
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DS_JSON_ADLSGen2",
+											"type": "DatasetReference"
+										}
+									]
+								},
+								{
+									"name": "Copy ADLS-Synapse",
+									"type": "Copy",
+									"dependsOn": [
+										{
+											"activity": "Copy IN as JSON",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "JsonSource",
+											"storeSettings": {
+												"type": "AzureBlobFSReadSettings",
+												"recursive": true,
+												"wildcardFolderPath": "Vinculum_Report/IN",
+												"wildcardFileName": "*.json",
+												"enablePartitionDiscovery": false
+											},
+											"formatSettings": {
+												"type": "JsonReadSettings"
+											}
+										},
+										"sink": {
+											"type": "SqlDWSink",
+											"allowCopyCommand": true
+										},
+										"enableStaging": true,
+										"stagingSettings": {
+											"linkedServiceName": {
+												"referenceName": "[parameters('LS_ADLSG2_DFXGP_EDW01_STG')]",
+												"type": "LinkedServiceReference"
+											},
+											"path": "staging-container"
+										},
+										"translator": {
+											"type": "TabularTranslator",
+											"mappings": [
+												{
+													"source": {
+														"path": "$['lineno']"
+													},
+													"sink": {
+														"name": "lineno",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['extLineno']"
+													},
+													"sink": {
+														"name": "extLineno",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['internalLineNo']"
+													},
+													"sink": {
+														"name": "internalLineNo",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['sku']"
+													},
+													"sink": {
+														"name": "sku",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['primaryUPC']"
+													},
+													"sink": {
+														"name": "primaryUPC",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['skuName']"
+													},
+													"sink": {
+														"name": "skuName",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['status']"
+													},
+													"sink": {
+														"name": "status",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['imageUrl']"
+													},
+													"sink": {
+														"name": "imageUrl",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['uom']"
+													},
+													"sink": {
+														"name": "uom",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['uomqty']"
+													},
+													"sink": {
+														"name": "uomqty",
+														"type": "Single"
+													}
+												},
+												{
+													"source": {
+														"path": "$['conversion']"
+													},
+													"sink": {
+														"name": "conversion",
+														"type": "Single"
+													}
+												},
+												{
+													"source": {
+														"path": "$['orderQty']"
+													},
+													"sink": {
+														"name": "orderQty",
+														"type": "Single"
+													}
+												},
+												{
+													"source": {
+														"path": "$['commitedQty']"
+													},
+													"sink": {
+														"name": "commitedQty",
+														"type": "Single"
+													}
+												},
+												{
+													"source": {
+														"path": "$['cancelledQty']"
+													},
+													"sink": {
+														"name": "cancelledQty",
+														"type": "Single"
+													}
+												},
+												{
+													"source": {
+														"path": "$['shippedQty']"
+													},
+													"sink": {
+														"name": "shippedQty",
+														"type": "Single"
+													}
+												},
+												{
+													"source": {
+														"path": "$['returnQty']"
+													},
+													"sink": {
+														"name": "returnQty",
+														"type": "Single"
+													}
+												},
+												{
+													"source": {
+														"path": "$['unitPrice']"
+													},
+													"sink": {
+														"name": "unitPrice",
+														"type": "Single"
+													}
+												},
+												{
+													"source": {
+														"path": "$['discountAmt']"
+													},
+													"sink": {
+														"name": "discountAmt",
+														"type": "Single"
+													}
+												},
+												{
+													"source": {
+														"path": "$['promoCode']"
+													},
+													"sink": {
+														"name": "promoCode",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['promoName']"
+													},
+													"sink": {
+														"name": "promoName",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['taxAmount']"
+													},
+													"sink": {
+														"name": "taxAmount",
+														"type": "Single"
+													}
+												},
+												{
+													"source": {
+														"path": "$['openQty']"
+													},
+													"sink": {
+														"name": "openQty",
+														"type": "Single"
+													}
+												},
+												{
+													"source": {
+														"path": "$['udf1']"
+													},
+													"sink": {
+														"name": "udf1",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['udf2']"
+													},
+													"sink": {
+														"name": "udf2",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['udf3']"
+													},
+													"sink": {
+														"name": "udf3",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['udf4']"
+													},
+													"sink": {
+														"name": "udf4",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['udf5']"
+													},
+													"sink": {
+														"name": "udf5",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['udf6']"
+													},
+													"sink": {
+														"name": "udf6",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['udf7']"
+													},
+													"sink": {
+														"name": "udf7",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['udf8']"
+													},
+													"sink": {
+														"name": "udf8",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['udf9']"
+													},
+													"sink": {
+														"name": "udf9",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['udf10']"
+													},
+													"sink": {
+														"name": "udf10",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['bundleSkuCode']"
+													},
+													"sink": {
+														"name": "bundleSkuCode",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['shipByDate']"
+													},
+													"sink": {
+														"name": "shipByDate",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['fulfillmentLocCode']"
+													},
+													"sink": {
+														"name": "fulfillmentLocCode",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['fulfillmentLocName']"
+													},
+													"sink": {
+														"name": "fulfillmentLocName",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['orderLocation']"
+													},
+													"sink": {
+														"name": "orderLocation",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['orderId']"
+													},
+													"sink": {
+														"name": "orderId",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['orderNo']"
+													},
+													"sink": {
+														"name": "orderNo",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['extenalOrderNo']"
+													},
+													"sink": {
+														"name": "extenalOrderNo",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['paymentMethod']"
+													},
+													"sink": {
+														"name": "paymentMethod",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['orderDate']"
+													},
+													"sink": {
+														"name": "orderDate",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['orderAmount']"
+													},
+													"sink": {
+														"name": "orderAmount",
+														"type": "Single"
+													}
+												},
+												{
+													"source": {
+														"path": "$['orderCurrency']"
+													},
+													"sink": {
+														"name": "orderCurrency",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['conversionRate']"
+													},
+													"sink": {
+														"name": "conversionRate",
+														"type": "Single"
+													}
+												},
+												{
+													"source": {
+														"path": "$['customerName']"
+													},
+													"sink": {
+														"name": "customerName",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['shipAddress1']"
+													},
+													"sink": {
+														"name": "shipAddress1",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['shipAddress2']"
+													},
+													"sink": {
+														"name": "shipAddress2",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['shipAddress3']"
+													},
+													"sink": {
+														"name": "shipAddress3",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['landmark']"
+													},
+													"sink": {
+														"name": "landmark",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['latitude']"
+													},
+													"sink": {
+														"name": "latitude",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['longitude']"
+													},
+													"sink": {
+														"name": "longitude",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['shipCity']"
+													},
+													"sink": {
+														"name": "shipCity",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['shipState']"
+													},
+													"sink": {
+														"name": "shipState",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['shipCountry']"
+													},
+													"sink": {
+														"name": "shipCountry",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['shipPincode']"
+													},
+													"sink": {
+														"name": "shipPincode",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['shipPhone1']"
+													},
+													"sink": {
+														"name": "shipPhone1",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['shipPhone2']"
+													},
+													"sink": {
+														"name": "shipPhone2",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['shipEmail1']"
+													},
+													"sink": {
+														"name": "shipEmail1",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['shipEmail2']"
+													},
+													"sink": {
+														"name": "shipEmail2",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['billName']"
+													},
+													"sink": {
+														"name": "billName",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['billAddress1']"
+													},
+													"sink": {
+														"name": "billAddress1",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['billAddress2']"
+													},
+													"sink": {
+														"name": "billAddress2",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['billAddress3']"
+													},
+													"sink": {
+														"name": "billAddress3",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['billCity']"
+													},
+													"sink": {
+														"name": "billCity",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['billState']"
+													},
+													"sink": {
+														"name": "billState",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['billCountry']"
+													},
+													"sink": {
+														"name": "billCountry",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['billPincode']"
+													},
+													"sink": {
+														"name": "billPincode",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['billPhone1']"
+													},
+													"sink": {
+														"name": "billPhone1",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['billPhone2']"
+													},
+													"sink": {
+														"name": "billPhone2",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['billEmail1']"
+													},
+													"sink": {
+														"name": "billEmail1",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['billEmail2']"
+													},
+													"sink": {
+														"name": "billEmail2",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['orderRemarks']"
+													},
+													"sink": {
+														"name": "orderRemarks",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['shippingCharges']"
+													},
+													"sink": {
+														"name": "shippingCharges",
+														"type": "Single"
+													}
+												},
+												{
+													"source": {
+														"path": "$['handlingCharge2']"
+													},
+													"sink": {
+														"name": "handlingCharge2",
+														"type": "Single"
+													}
+												},
+												{
+													"source": {
+														"path": "$['storeCredit']"
+													},
+													"sink": {
+														"name": "storeCredit",
+														"type": "Single"
+													}
+												},
+												{
+													"source": {
+														"path": "$['isVerifiedOrder']"
+													},
+													"sink": {
+														"name": "isVerifiedOrder",
+														"type": "Single"
+													}
+												},
+												{
+													"source": {
+														"path": "$['isOnHold']"
+													},
+													"sink": {
+														"name": "isOnHold",
+														"type": "Single"
+													}
+												},
+												{
+													"source": {
+														"path": "$['giftvoucher']"
+													},
+													"sink": {
+														"name": "giftvoucher",
+														"type": "Single"
+													}
+												},
+												{
+													"source": {
+														"path": "$['otherDiscount']"
+													},
+													"sink": {
+														"name": "otherDiscount",
+														"type": "Single"
+													}
+												},
+												{
+													"source": {
+														"path": "$['discountCode']"
+													},
+													"sink": {
+														"name": "discountCode",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['cancelRemark']"
+													},
+													"sink": {
+														"name": "cancelRemark",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['isGiftwrap']"
+													},
+													"sink": {
+														"name": "isGiftwrap",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['giftwrapMsg']"
+													},
+													"sink": {
+														"name": "giftwrapMsg",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['deliverySlot']"
+													},
+													"sink": {
+														"name": "deliverySlot",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['customDataFeld1']"
+													},
+													"sink": {
+														"name": "customDataFeld1",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['customDataFeld2']"
+													},
+													"sink": {
+														"name": "customDataFeld2",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['customDataFeld3']"
+													},
+													"sink": {
+														"name": "customDataFeld3",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['customDataFeld4']"
+													},
+													"sink": {
+														"name": "customDataFeld4",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['customDataFeld5']"
+													},
+													"sink": {
+														"name": "customDataFeld5",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['customDataFeld6']"
+													},
+													"sink": {
+														"name": "customDataFeld6",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['customDataFeld7']"
+													},
+													"sink": {
+														"name": "customDataFeld7",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['customDataFeld8']"
+													},
+													"sink": {
+														"name": "customDataFeld8",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['customDataFeld9']"
+													},
+													"sink": {
+														"name": "customDataFeld9",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['customDataFeld10']"
+													},
+													"sink": {
+														"name": "customDataFeld10",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['discountAmount']"
+													},
+													"sink": {
+														"name": "discountAmount",
+														"type": "Single"
+													}
+												},
+												{
+													"source": {
+														"path": "$['updatedDate']"
+													},
+													"sink": {
+														"name": "updatedDate",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['mode']"
+													},
+													"sink": {
+														"name": "mode",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['IsReplacementOrder']"
+													},
+													"sink": {
+														"name": "IsReplacementOrder",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['originalOrderno']"
+													},
+													"sink": {
+														"name": "OrigialOrderNo",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['customerCode']"
+													},
+													"sink": {
+														"name": "customerCode",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['extCustomerCode']"
+													},
+													"sink": {
+														"name": "extCustomerCode",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['clientId']"
+													},
+													"sink": {
+														"name": "clientId",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['extFulFillmentLocCode']"
+													},
+													"sink": {
+														"name": "extFulFillmentLocCode",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['orderSourceName']"
+													},
+													"sink": {
+														"name": "orderSourceName",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['collectibleAmount']"
+													},
+													"sink": {
+														"name": "collectibleAmount",
+														"type": "Single"
+													}
+												},
+												{
+													"source": {
+														"path": "$['totalOrderLine']"
+													},
+													"sink": {
+														"name": "totalOrderLine",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['delFulfillmentMode']"
+													},
+													"sink": {
+														"name": "delFulfillmentMode",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['geoType']"
+													},
+													"sink": {
+														"name": "geoType",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['geoAddress']"
+													},
+													"sink": {
+														"name": "geoAddress",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['geoLatitude']"
+													},
+													"sink": {
+														"name": "geoLatitude",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['geoLongitude']"
+													},
+													"sink": {
+														"name": "geoLongitude",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['orderSource']"
+													},
+													"sink": {
+														"name": "orderSource",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['orderType']"
+													},
+													"sink": {
+														"name": "orderType",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['processAfterDate']"
+													},
+													"sink": {
+														"name": "processAfterDate",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['masterorderNo']"
+													},
+													"sink": {
+														"name": "masterorderNo",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['priority']"
+													},
+													"sink": {
+														"name": "priority",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['pickupLocation']"
+													},
+													"sink": {
+														"name": "pickupLocation",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['paymentItems'][0]"
+													},
+													"sink": {
+														"name": "PaymentItems",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['codcharge']"
+													},
+													"sink": {
+														"name": "codcharge",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['customerGSTIN']"
+													},
+													"sink": {
+														"name": "CustomerGSTIN",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['ETLLoadDate']"
+													},
+													"sink": {
+														"name": "ETLLoadDate",
+														"type": "DateTime"
+													}
+												}
+											],
+											"collectionReference": "",
+											"mapComplexValuesToString": false
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "Ds_JSON_Vinculum",
+											"type": "DatasetReference"
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DS_Sink_Synapse_Vinculum",
+											"type": "DatasetReference"
+										}
+									]
+								},
+								{
+									"name": "COPY IN-OUT",
+									"type": "Copy",
+									"dependsOn": [
+										{
+											"activity": "Copy ADLS-Synapse",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "JsonSource",
+											"storeSettings": {
+												"type": "AzureBlobFSReadSettings",
+												"recursive": true,
+												"wildcardFolderPath": "Vinculum_Report/IN",
+												"wildcardFileName": "*.json",
+												"enablePartitionDiscovery": false
+											},
+											"formatSettings": {
+												"type": "JsonReadSettings"
+											}
+										},
+										"sink": {
+											"type": "JsonSink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings"
+											},
+											"formatSettings": {
+												"type": "JsonWriteSettings"
+											}
+										},
+										"enableStaging": false
+									},
+									"inputs": [
+										{
+											"referenceName": "DS_Vinculum_JSON_Copy_IN",
+											"type": "DatasetReference"
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DS_Vinculum_JSON_COPY_OUT",
+											"type": "DatasetReference"
+										}
+									]
+								},
+								{
+									"name": "Delete-IN",
+									"type": "Delete",
+									"dependsOn": [
+										{
+											"activity": "COPY IN-OUT",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"dataset": {
+											"referenceName": "DS_Vinculum_JSON_Copy_IN",
+											"type": "DatasetReference"
+										},
+										"enableLogging": false,
+										"storeSettings": {
+											"type": "AzureBlobFSReadSettings",
+											"recursive": true,
+											"wildcardFileName": "*.json",
+											"enablePartitionDiscovery": false
+										}
+									}
+								}
+							]
+						}
+					},
+					{
+						"name": "Stored procedure1",
+						"type": "SqlServerStoredProcedure",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"storedProcedureName": "[[STG_Duroflex_BI].[STG_VINOrder_SP]"
+						},
+						"linkedServiceName": {
+							"referenceName": "[parameters('LS_AzSynapse_DFXGP_EDW01')]",
+							"type": "LinkedServiceReference"
+						}
+					},
+					{
+						"name": "Set FromDate",
+						"type": "SetVariable",
+						"dependsOn": [
+							{
+								"activity": "Stored procedure1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "FromDate",
+							"value": {
+								"value": "@formatDateTime(subtractFromTime(convertTimeZone(utcNow(),'UTC','India Standard Time'),6,'Day'),'dd/MM/yyyy hh:mm:ss')",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "Set End Date",
+						"type": "SetVariable",
+						"dependsOn": [
+							{
+								"activity": "Set FromDate",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "EndDate",
+							"value": {
+								"value": "@utcNow('dd/MM/yyyy hh:mm:ss')",
+								"type": "Expression"
+							}
+						}
+					}
+				],
+				"variables": {
+					"PageNumber": {
+						"type": "String"
+					},
+					"PageNumberValue": {
+						"type": "String"
+					},
+					"Vinculum Result": {
+						"type": "Array"
+					},
+					"FromDate": {
+						"type": "String"
+					},
+					"EndDate": {
+						"type": "String"
+					},
+					"ISTConversion": {
+						"type": "String"
+					}
+				},
+				"folder": {
+					"name": "Vinculum-REST API"
+				},
+				"annotations": [],
+				"lastPublishTime": "2022-11-05T12:42:45Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/Vinculum_REST_ForEach')]",
+				"[concat(variables('factoryId'), '/datasets/DS_JSON_ADLSGen2')]",
+				"[concat(variables('factoryId'), '/datasets/Ds_JSON_Vinculum')]",
+				"[concat(variables('factoryId'), '/datasets/DS_Sink_Synapse_Vinculum')]",
+				"[concat(variables('factoryId'), '/datasets/DS_Vinculum_JSON_Copy_IN')]",
+				"[concat(variables('factoryId'), '/datasets/DS_Vinculum_JSON_COPY_OUT')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Vinculum_REST_ForEach')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_Vinculum_AzFunction')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "RestResource",
+				"schema": []
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_JSON_ADLSGen2')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_ADLSG2_DFXGP_EDW01_STG')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "Json",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"folderPath": "Vinculum_Report/IN",
+						"fileSystem": "fs-ci-dfxgp-vinculum"
+					}
+				},
+				"schema": {
+					"type": "object",
+					"properties": {
+						"responseCode": {
+							"type": "integer"
+						},
+						"responseMessage": {
+							"type": "string"
+						},
+						"totalOrders": {
+							"type": "integer"
+						},
+						"totalPages": {
+							"type": "integer"
+						},
+						"currentPage": {
+							"type": "integer"
+						},
+						"orderList": {
+							"type": "array",
+							"items": {
+								"type": "object",
+								"properties": {
+									"407-4940923-6720314~DTXyWvrbQ": {
+										"type": "object",
+										"properties": {
+											"orderLocation": {
+												"type": "string"
+											},
+											"orderId": {
+												"type": "string"
+											},
+											"orderNo": {
+												"type": "string"
+											},
+											"extenalOrderNo": {
+												"type": "string"
+											},
+											"paymentMethod": {
+												"type": "string"
+											},
+											"status": {
+												"type": "string"
+											},
+											"orderDate": {
+												"type": "string"
+											},
+											"orderAmount": {
+												"type": "string"
+											},
+											"orderCurrency": {
+												"type": "string"
+											},
+											"conversionRate": {
+												"type": "string"
+											},
+											"customerName": {
+												"type": "string"
+											},
+											"shipAddress1": {
+												"type": "string"
+											},
+											"shipAddress2": {
+												"type": "string"
+											},
+											"shipAddress3": {
+												"type": "string"
+											},
+											"landmark": {
+												"type": "string"
+											},
+											"latitude": {
+												"type": "string"
+											},
+											"longitude": {
+												"type": "string"
+											},
+											"shipCity": {
+												"type": "string"
+											},
+											"shipState": {
+												"type": "string"
+											},
+											"shipCountry": {
+												"type": "string"
+											},
+											"shipPincode": {
+												"type": "string"
+											},
+											"shipPhone1": {
+												"type": "string"
+											},
+											"shipPhone2": {
+												"type": "string"
+											},
+											"shipEmail1": {
+												"type": "string"
+											},
+											"shipEmail2": {
+												"type": "string"
+											},
+											"billName": {
+												"type": "string"
+											},
+											"billAddress1": {
+												"type": "string"
+											},
+											"billAddress2": {
+												"type": "string"
+											},
+											"billAddress3": {
+												"type": "string"
+											},
+											"billCity": {
+												"type": "string"
+											},
+											"billState": {
+												"type": "string"
+											},
+											"billCountry": {
+												"type": "string"
+											},
+											"billPincode": {
+												"type": "string"
+											},
+											"billPhone1": {
+												"type": "string"
+											},
+											"billPhone2": {
+												"type": "string"
+											},
+											"billEmail1": {
+												"type": "string"
+											},
+											"billEmail2": {
+												"type": "string"
+											},
+											"orderRemarks": {
+												"type": "null"
+											},
+											"shippingCharges": {
+												"type": "string"
+											},
+											"handlingCharge2": {
+												"type": "string"
+											},
+											"storeCredit": {
+												"type": "string"
+											},
+											"isVerifiedOrder": {
+												"type": "string"
+											},
+											"isOnHold": {
+												"type": "string"
+											},
+											"giftvoucher": {
+												"type": "string"
+											},
+											"otherDiscount": {
+												"type": "string"
+											},
+											"discountCode": {
+												"type": "string"
+											},
+											"promoCode": {
+												"type": "null"
+											},
+											"promoName": {
+												"type": "null"
+											},
+											"cancelRemark": {
+												"type": "string"
+											},
+											"isGiftwrap": {
+												"type": "string"
+											},
+											"giftwrapMsg": {
+												"type": "string"
+											},
+											"deliverySlot": {
+												"type": "string"
+											},
+											"customDataFeld1": {
+												"type": "string"
+											},
+											"customDataFeld2": {
+												"type": "string"
+											},
+											"customDataFeld3": {
+												"type": "string"
+											},
+											"customDataFeld4": {
+												"type": "string"
+											},
+											"customDataFeld5": {
+												"type": "string"
+											},
+											"customDataFeld6": {
+												"type": "string"
+											},
+											"customDataFeld7": {
+												"type": "string"
+											},
+											"customDataFeld8": {
+												"type": "string"
+											},
+											"customDataFeld9": {
+												"type": "string"
+											},
+											"customDataFeld10": {
+												"type": "string"
+											},
+											"discountAmount": {
+												"type": "string"
+											},
+											"taxAmount": {
+												"type": "string"
+											},
+											"updatedDate": {
+												"type": "string"
+											},
+											"mode": {
+												"type": "string"
+											},
+											"IsReplacementOrder": {
+												"type": "string"
+											},
+											"originalOrderno": {
+												"type": "string"
+											},
+											"customerCode": {
+												"type": "string"
+											},
+											"extCustomerCode": {
+												"type": "string"
+											},
+											"clientId": {
+												"type": "string"
+											},
+											"fulfillmentLocCode": {
+												"type": "string"
+											},
+											"extFulFillmentLocCode": {
+												"type": "string"
+											},
+											"orderSourceName": {
+												"type": "string"
+											},
+											"collectibleAmount": {
+												"type": "string"
+											},
+											"totalOrderLine": {
+												"type": "string"
+											},
+											"delFulfillmentMode": {
+												"type": "string"
+											},
+											"geoType": {
+												"type": "null"
+											},
+											"geoAddress": {
+												"type": "null"
+											},
+											"geoLatitude": {
+												"type": "null"
+											},
+											"geoLongitude": {
+												"type": "null"
+											},
+											"orderSource": {
+												"type": "string"
+											},
+											"orderType": {
+												"type": "string"
+											},
+											"shipByDate": {
+												"type": "string"
+											},
+											"processAfterDate": {
+												"type": "string"
+											},
+											"masterorderNo": {
+												"type": "string"
+											},
+											"priority": {
+												"type": "string"
+											},
+											"pickupLocation": {
+												"type": "string"
+											},
+											"fulfillmentLocName": {
+												"type": "string"
+											},
+											"items": {
+												"type": "array",
+												"items": {
+													"type": "object",
+													"properties": {
+														"lineno": {
+															"type": "string"
+														},
+														"extLineno": {
+															"type": "string"
+														},
+														"internalLineNo": {
+															"type": "string"
+														},
+														"sku": {
+															"type": "string"
+														},
+														"primaryUPC": {
+															"type": "null"
+														},
+														"skuName": {
+															"type": "string"
+														},
+														"status": {
+															"type": "null"
+														},
+														"imageUrl": {
+															"type": "null"
+														},
+														"uom": {
+															"type": "string"
+														},
+														"uomqty": {
+															"type": "string"
+														},
+														"conversion": {
+															"type": "string"
+														},
+														"orderQty": {
+															"type": "string"
+														},
+														"commitedQty": {
+															"type": "string"
+														},
+														"cancelledQty": {
+															"type": "string"
+														},
+														"shippedQty": {
+															"type": "string"
+														},
+														"returnQty": {
+															"type": "string"
+														},
+														"unitPrice": {
+															"type": "string"
+														},
+														"discountAmt": {
+															"type": "string"
+														},
+														"promoCode": {
+															"type": "null"
+														},
+														"promoName": {
+															"type": "null"
+														},
+														"taxAmount": {
+															"type": "string"
+														},
+														"openQty": {
+															"type": "string"
+														},
+														"udf1": {
+															"type": "string"
+														},
+														"udf2": {
+															"type": "string"
+														},
+														"udf3": {
+															"type": "string"
+														},
+														"udf4": {
+															"type": "string"
+														},
+														"udf5": {
+															"type": "string"
+														},
+														"udf6": {
+															"type": "string"
+														},
+														"udf7": {
+															"type": "string"
+														},
+														"udf8": {
+															"type": "string"
+														},
+														"udf9": {
+															"type": "string"
+														},
+														"udf10": {
+															"type": "string"
+														},
+														"bundleSkuCode": {
+															"type": "null"
+														},
+														"shipByDate": {
+															"type": "string"
+														},
+														"fulfillmentLocCode": {
+															"type": "string"
+														},
+														"fulfillmentLocName": {
+															"type": "string"
+														}
+													}
+												}
+											},
+											"paymentItems": {
+												"type": "array"
+											},
+											"customerGSTIN": {
+												"type": "string"
+											},
+											"codcharge": {
+												"type": "string"
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Ds_JSON_Vinculum')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_ADLSG2_DFXGP_EDW01_STG')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "Json",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"folderPath": "Vinculum_Report/IN",
+						"fileSystem": "fs-ci-dfxgp-vinculum"
+					}
+				},
+				"schema": {
+					"type": "object",
+					"properties": {
+						"lineno": {
+							"type": "string"
+						},
+						"extLineno": {
+							"type": "string"
+						},
+						"internalLineNo": {
+							"type": "string"
+						},
+						"sku": {
+							"type": "string"
+						},
+						"primaryUPC": {
+							"type": "null"
+						},
+						"skuName": {
+							"type": "string"
+						},
+						"status": {
+							"type": "string"
+						},
+						"imageUrl": {
+							"type": "null"
+						},
+						"uom": {
+							"type": "string"
+						},
+						"uomqty": {
+							"type": "string"
+						},
+						"conversion": {
+							"type": "string"
+						},
+						"orderQty": {
+							"type": "string"
+						},
+						"commitedQty": {
+							"type": "string"
+						},
+						"cancelledQty": {
+							"type": "string"
+						},
+						"shippedQty": {
+							"type": "string"
+						},
+						"returnQty": {
+							"type": "string"
+						},
+						"unitPrice": {
+							"type": "string"
+						},
+						"discountAmt": {
+							"type": "string"
+						},
+						"promoCode": {
+							"type": "null"
+						},
+						"promoName": {
+							"type": "null"
+						},
+						"taxAmount": {
+							"type": "string"
+						},
+						"openQty": {
+							"type": "string"
+						},
+						"udf1": {
+							"type": "string"
+						},
+						"udf2": {
+							"type": "string"
+						},
+						"udf3": {
+							"type": "string"
+						},
+						"udf4": {
+							"type": "string"
+						},
+						"udf5": {
+							"type": "string"
+						},
+						"udf6": {
+							"type": "string"
+						},
+						"udf7": {
+							"type": "string"
+						},
+						"udf8": {
+							"type": "string"
+						},
+						"udf9": {
+							"type": "string"
+						},
+						"udf10": {
+							"type": "string"
+						},
+						"bundleSkuCode": {
+							"type": "null"
+						},
+						"shipByDate": {
+							"type": "string"
+						},
+						"fulfillmentLocCode": {
+							"type": "string"
+						},
+						"fulfillmentLocName": {
+							"type": "string"
+						},
+						"orderLocation": {
+							"type": "string"
+						},
+						"orderId": {
+							"type": "string"
+						},
+						"orderNo": {
+							"type": "string"
+						},
+						"extenalOrderNo": {
+							"type": "string"
+						},
+						"paymentMethod": {
+							"type": "string"
+						},
+						"orderDate": {
+							"type": "string"
+						},
+						"orderAmount": {
+							"type": "string"
+						},
+						"orderCurrency": {
+							"type": "string"
+						},
+						"conversionRate": {
+							"type": "string"
+						},
+						"customerName": {
+							"type": "string"
+						},
+						"shipAddress1": {
+							"type": "string"
+						},
+						"shipAddress2": {
+							"type": "string"
+						},
+						"shipAddress3": {
+							"type": "string"
+						},
+						"landmark": {
+							"type": "string"
+						},
+						"latitude": {
+							"type": "string"
+						},
+						"longitude": {
+							"type": "string"
+						},
+						"shipCity": {
+							"type": "string"
+						},
+						"shipState": {
+							"type": "string"
+						},
+						"shipCountry": {
+							"type": "string"
+						},
+						"shipPincode": {
+							"type": "string"
+						},
+						"shipPhone1": {
+							"type": "string"
+						},
+						"shipPhone2": {
+							"type": "string"
+						},
+						"shipEmail1": {
+							"type": "string"
+						},
+						"shipEmail2": {
+							"type": "string"
+						},
+						"billName": {
+							"type": "string"
+						},
+						"billAddress1": {
+							"type": "string"
+						},
+						"billAddress2": {
+							"type": "string"
+						},
+						"billAddress3": {
+							"type": "string"
+						},
+						"billCity": {
+							"type": "string"
+						},
+						"billState": {
+							"type": "string"
+						},
+						"billCountry": {
+							"type": "string"
+						},
+						"billPincode": {
+							"type": "string"
+						},
+						"billPhone1": {
+							"type": "string"
+						},
+						"billPhone2": {
+							"type": "string"
+						},
+						"billEmail1": {
+							"type": "string"
+						},
+						"billEmail2": {
+							"type": "string"
+						},
+						"orderRemarks": {
+							"type": "null"
+						},
+						"shippingCharges": {
+							"type": "string"
+						},
+						"handlingCharge2": {
+							"type": "string"
+						},
+						"storeCredit": {
+							"type": "string"
+						},
+						"isVerifiedOrder": {
+							"type": "string"
+						},
+						"isOnHold": {
+							"type": "string"
+						},
+						"giftvoucher": {
+							"type": "string"
+						},
+						"otherDiscount": {
+							"type": "string"
+						},
+						"discountCode": {
+							"type": "string"
+						},
+						"cancelRemark": {
+							"type": "string"
+						},
+						"isGiftwrap": {
+							"type": "string"
+						},
+						"giftwrapMsg": {
+							"type": "string"
+						},
+						"deliverySlot": {
+							"type": "string"
+						},
+						"customDataFeld1": {
+							"type": "string"
+						},
+						"customDataFeld2": {
+							"type": "string"
+						},
+						"customDataFeld3": {
+							"type": "string"
+						},
+						"customDataFeld4": {
+							"type": "string"
+						},
+						"customDataFeld5": {
+							"type": "string"
+						},
+						"customDataFeld6": {
+							"type": "string"
+						},
+						"customDataFeld7": {
+							"type": "string"
+						},
+						"customDataFeld8": {
+							"type": "string"
+						},
+						"customDataFeld9": {
+							"type": "string"
+						},
+						"customDataFeld10": {
+							"type": "string"
+						},
+						"discountAmount": {
+							"type": "string"
+						},
+						"updatedDate": {
+							"type": "string"
+						},
+						"mode": {
+							"type": "string"
+						},
+						"IsReplacementOrder": {
+							"type": "string"
+						},
+						"originalOrderno": {
+							"type": "string"
+						},
+						"customerCode": {
+							"type": "string"
+						},
+						"extCustomerCode": {
+							"type": "string"
+						},
+						"clientId": {
+							"type": "string"
+						},
+						"extFulFillmentLocCode": {
+							"type": "string"
+						},
+						"orderSourceName": {
+							"type": "string"
+						},
+						"collectibleAmount": {
+							"type": "string"
+						},
+						"totalOrderLine": {
+							"type": "string"
+						},
+						"delFulfillmentMode": {
+							"type": "string"
+						},
+						"geoType": {
+							"type": "null"
+						},
+						"geoAddress": {
+							"type": "null"
+						},
+						"geoLatitude": {
+							"type": "null"
+						},
+						"geoLongitude": {
+							"type": "null"
+						},
+						"orderSource": {
+							"type": "string"
+						},
+						"orderType": {
+							"type": "string"
+						},
+						"processAfterDate": {
+							"type": "string"
+						},
+						"masterorderNo": {
+							"type": "string"
+						},
+						"priority": {
+							"type": "string"
+						},
+						"pickupLocation": {
+							"type": "string"
+						},
+						"paymentItems": {
+							"type": "array"
+						},
+						"codcharge": {
+							"type": "string"
+						},
+						"customerGSTIN": {
+							"type": "string"
+						},
+						"ETLLoadDate": {
+							"type": "string"
+						}
+					}
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_Sink_Synapse_Vinculum')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_AzSynapse_DFXGP_EDW01')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "AzureSqlDWTable",
+				"schema": [
+					{
+						"name": "orderLocation",
+						"type": "nvarchar"
+					},
+					{
+						"name": "orderId",
+						"type": "nvarchar"
+					},
+					{
+						"name": "orderNo",
+						"type": "nvarchar"
+					},
+					{
+						"name": "extenalOrderNo",
+						"type": "nvarchar"
+					},
+					{
+						"name": "paymentMethod",
+						"type": "nvarchar"
+					},
+					{
+						"name": "status",
+						"type": "nvarchar"
+					},
+					{
+						"name": "orderDate",
+						"type": "nvarchar"
+					},
+					{
+						"name": "orderAmount",
+						"type": "float",
+						"precision": 15
+					},
+					{
+						"name": "orderCurrency",
+						"type": "nvarchar"
+					},
+					{
+						"name": "conversionRate",
+						"type": "float",
+						"precision": 15
+					},
+					{
+						"name": "customerName",
+						"type": "nvarchar"
+					},
+					{
+						"name": "shipAddress1",
+						"type": "nvarchar"
+					},
+					{
+						"name": "shipAddress2",
+						"type": "nvarchar"
+					},
+					{
+						"name": "shipAddress3",
+						"type": "nvarchar"
+					},
+					{
+						"name": "landmark",
+						"type": "nvarchar"
+					},
+					{
+						"name": "latitude",
+						"type": "nvarchar"
+					},
+					{
+						"name": "longitude",
+						"type": "nvarchar"
+					},
+					{
+						"name": "shipCity",
+						"type": "nvarchar"
+					},
+					{
+						"name": "shipState",
+						"type": "nvarchar"
+					},
+					{
+						"name": "shipCountry",
+						"type": "nvarchar"
+					},
+					{
+						"name": "shipPincode",
+						"type": "nvarchar"
+					},
+					{
+						"name": "shipPhone1",
+						"type": "nvarchar"
+					},
+					{
+						"name": "shipPhone2",
+						"type": "nvarchar"
+					},
+					{
+						"name": "shipEmail1",
+						"type": "nvarchar"
+					},
+					{
+						"name": "shipEmail2",
+						"type": "nvarchar"
+					},
+					{
+						"name": "billName",
+						"type": "nvarchar"
+					},
+					{
+						"name": "billAddress1",
+						"type": "nvarchar"
+					},
+					{
+						"name": "billAddress2",
+						"type": "nvarchar"
+					},
+					{
+						"name": "billAddress3",
+						"type": "nvarchar"
+					},
+					{
+						"name": "billCity",
+						"type": "nvarchar"
+					},
+					{
+						"name": "billState",
+						"type": "nvarchar"
+					},
+					{
+						"name": "billCountry",
+						"type": "nvarchar"
+					},
+					{
+						"name": "billPincode",
+						"type": "nvarchar"
+					},
+					{
+						"name": "billPhone1",
+						"type": "nvarchar"
+					},
+					{
+						"name": "billPhone2",
+						"type": "nvarchar"
+					},
+					{
+						"name": "billEmail1",
+						"type": "nvarchar"
+					},
+					{
+						"name": "billEmail2",
+						"type": "nvarchar"
+					},
+					{
+						"name": "orderRemarks",
+						"type": "nvarchar"
+					},
+					{
+						"name": "shippingCharges",
+						"type": "float",
+						"precision": 15
+					},
+					{
+						"name": "handlingCharge2",
+						"type": "float",
+						"precision": 15
+					},
+					{
+						"name": "storeCredit",
+						"type": "float",
+						"precision": 15
+					},
+					{
+						"name": "isVerifiedOrder",
+						"type": "float",
+						"precision": 15
+					},
+					{
+						"name": "isOnHold",
+						"type": "float",
+						"precision": 15
+					},
+					{
+						"name": "giftvoucher",
+						"type": "float",
+						"precision": 15
+					},
+					{
+						"name": "otherDiscount",
+						"type": "float",
+						"precision": 15
+					},
+					{
+						"name": "discountCode",
+						"type": "varchar"
+					},
+					{
+						"name": "promoCode",
+						"type": "nvarchar"
+					},
+					{
+						"name": "promoName",
+						"type": "nvarchar"
+					},
+					{
+						"name": "cancelRemark",
+						"type": "nvarchar"
+					},
+					{
+						"name": "isGiftwrap",
+						"type": "nvarchar"
+					},
+					{
+						"name": "giftwrapMsg",
+						"type": "nvarchar"
+					},
+					{
+						"name": "deliverySlot",
+						"type": "nvarchar"
+					},
+					{
+						"name": "customDataFeld1",
+						"type": "nvarchar"
+					},
+					{
+						"name": "customDataFeld2",
+						"type": "nvarchar"
+					},
+					{
+						"name": "customDataFeld3",
+						"type": "nvarchar"
+					},
+					{
+						"name": "customDataFeld4",
+						"type": "nvarchar"
+					},
+					{
+						"name": "customDataFeld5",
+						"type": "nvarchar"
+					},
+					{
+						"name": "customDataFeld6",
+						"type": "nvarchar"
+					},
+					{
+						"name": "customDataFeld7",
+						"type": "nvarchar"
+					},
+					{
+						"name": "customDataFeld8",
+						"type": "nvarchar"
+					},
+					{
+						"name": "customDataFeld9",
+						"type": "nvarchar"
+					},
+					{
+						"name": "customDataFeld10",
+						"type": "nvarchar"
+					},
+					{
+						"name": "discountAmount",
+						"type": "float",
+						"precision": 15
+					},
+					{
+						"name": "taxAmount",
+						"type": "float",
+						"precision": 15
+					},
+					{
+						"name": "updatedDate",
+						"type": "nvarchar"
+					},
+					{
+						"name": "mode",
+						"type": "nvarchar"
+					},
+					{
+						"name": "IsReplacementOrder",
+						"type": "nvarchar"
+					},
+					{
+						"name": "customerCode",
+						"type": "nvarchar"
+					},
+					{
+						"name": "extCustomerCode",
+						"type": "nvarchar"
+					},
+					{
+						"name": "clientId",
+						"type": "nvarchar"
+					},
+					{
+						"name": "fulfillmentLocCode",
+						"type": "nvarchar"
+					},
+					{
+						"name": "extFulFillmentLocCode",
+						"type": "nvarchar"
+					},
+					{
+						"name": "orderSourceName",
+						"type": "nvarchar"
+					},
+					{
+						"name": "collectibleAmount",
+						"type": "float",
+						"precision": 15
+					},
+					{
+						"name": "totalOrderLine",
+						"type": "nvarchar"
+					},
+					{
+						"name": "delFulfillmentMode",
+						"type": "nvarchar"
+					},
+					{
+						"name": "geoType",
+						"type": "nvarchar"
+					},
+					{
+						"name": "geoAddress",
+						"type": "nvarchar"
+					},
+					{
+						"name": "geoLatitude",
+						"type": "nvarchar"
+					},
+					{
+						"name": "geoLongitude",
+						"type": "nvarchar"
+					},
+					{
+						"name": "orderSource",
+						"type": "nvarchar"
+					},
+					{
+						"name": "orderType",
+						"type": "nvarchar"
+					},
+					{
+						"name": "shipByDate",
+						"type": "nvarchar"
+					},
+					{
+						"name": "processAfterDate",
+						"type": "nvarchar"
+					},
+					{
+						"name": "masterorderNo",
+						"type": "nvarchar"
+					},
+					{
+						"name": "priority",
+						"type": "nvarchar"
+					},
+					{
+						"name": "pickupLocation",
+						"type": "nvarchar"
+					},
+					{
+						"name": "fulfillmentLocName",
+						"type": "nvarchar"
+					},
+					{
+						"name": "lineno",
+						"type": "nvarchar"
+					},
+					{
+						"name": "extLineno",
+						"type": "nvarchar"
+					},
+					{
+						"name": "internalLineNo",
+						"type": "nvarchar"
+					},
+					{
+						"name": "sku",
+						"type": "nvarchar"
+					},
+					{
+						"name": "primaryUPC",
+						"type": "nvarchar"
+					},
+					{
+						"name": "skuName",
+						"type": "nvarchar"
+					},
+					{
+						"name": "imageUrl",
+						"type": "nvarchar"
+					},
+					{
+						"name": "uom",
+						"type": "nvarchar"
+					},
+					{
+						"name": "uomqty",
+						"type": "float",
+						"precision": 15
+					},
+					{
+						"name": "conversion",
+						"type": "float",
+						"precision": 15
+					},
+					{
+						"name": "orderQty",
+						"type": "float",
+						"precision": 15
+					},
+					{
+						"name": "commitedQty",
+						"type": "float",
+						"precision": 15
+					},
+					{
+						"name": "cancelledQty",
+						"type": "float",
+						"precision": 15
+					},
+					{
+						"name": "shippedQty",
+						"type": "float",
+						"precision": 15
+					},
+					{
+						"name": "returnQty",
+						"type": "float",
+						"precision": 15
+					},
+					{
+						"name": "unitPrice",
+						"type": "float",
+						"precision": 15
+					},
+					{
+						"name": "discountAmt",
+						"type": "float",
+						"precision": 15
+					},
+					{
+						"name": "openQty",
+						"type": "float",
+						"precision": 15
+					},
+					{
+						"name": "udf1",
+						"type": "nvarchar"
+					},
+					{
+						"name": "udf2",
+						"type": "nvarchar"
+					},
+					{
+						"name": "udf3",
+						"type": "nvarchar"
+					},
+					{
+						"name": "udf4",
+						"type": "nvarchar"
+					},
+					{
+						"name": "udf5",
+						"type": "nvarchar"
+					},
+					{
+						"name": "udf6",
+						"type": "nvarchar"
+					},
+					{
+						"name": "udf7",
+						"type": "nvarchar"
+					},
+					{
+						"name": "udf8",
+						"type": "nvarchar"
+					},
+					{
+						"name": "udf9",
+						"type": "nvarchar"
+					},
+					{
+						"name": "udf10",
+						"type": "nvarchar"
+					},
+					{
+						"name": "bundleSkuCode",
+						"type": "nvarchar"
+					},
+					{
+						"name": "orderList",
+						"type": "nvarchar"
+					},
+					{
+						"name": "codcharge",
+						"type": "varchar"
+					},
+					{
+						"name": "CustomerGSTIN",
+						"type": "varchar"
+					},
+					{
+						"name": "PaymentItems",
+						"type": "varchar"
+					},
+					{
+						"name": "OrigialOrderNo",
+						"type": "varchar"
+					},
+					{
+						"name": "ETLLoadDate",
+						"type": "datetime",
+						"precision": 23,
+						"scale": 3
+					}
+				],
+				"typeProperties": {
+					"schema": "STG_Duroflex_BI",
+					"table": "STG_VINOrder"
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_Vinculum_JSON_Copy_IN')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_ADLSG2_DFXGP_EDW01_STG')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "Json",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"folderPath": "Vinculum_Report/IN",
+						"fileSystem": "fs-ci-dfxgp-vinculum"
+					}
+				},
+				"schema": {}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_Vinculum_JSON_COPY_OUT')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_ADLSG2_DFXGP_EDW01_STG')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "Json",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"folderPath": "Vinculum_Report/OUT",
+						"fileSystem": "fs-ci-dfxgp-vinculum"
+					}
+				},
+				"schema": {}
+			},
+			"dependsOn": []
+		}
+	]
+}
