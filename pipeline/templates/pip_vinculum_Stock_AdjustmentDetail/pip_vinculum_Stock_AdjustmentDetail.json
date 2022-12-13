@@ -1,0 +1,871 @@
+{
+	"$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"factoryName": {
+			"type": "string",
+			"metadata": "Data Factory name"
+		},
+		"LS_ADLSG2_DFXGP_EDW01_STG": {
+			"type": "string"
+		},
+		"LS_REST_VinStock_AdjustmentDetail": {
+			"type": "string"
+		},
+		"LS_AzSynapse_DFXGP_EDW01": {
+			"type": "string"
+		}
+	},
+	"variables": {
+		"factoryId": "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]"
+	},
+	"resources": [
+		{
+			"name": "[concat(parameters('factoryName'), '/pip_vinculum_Stock_AdjustmentDetail')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "Web1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@range(1,activity('Web1').output.totalPages)",
+								"type": "Expression"
+							},
+							"isSequential": true,
+							"activities": [
+								{
+									"name": "Copy IN as JSON",
+									"type": "Copy",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "RestSource",
+											"httpRequestTimeout": "00:01:40",
+											"requestInterval": "00.00:00:00.010",
+											"requestMethod": "POST",
+											"requestBody": {
+												"value": "@concat('ApiOwner=Shrijit&ApiKey=754b261806fe43339313c224ab7603a87b9a5f0d518548de9d3de29&RequestBody= {\"skuCode\":[],\"location\":\"GGN\",\"date_from\":\"03/10/2022 00:00:00\",\"date_to\":\"09/10/2022 00:00:00\",\"pageNumber\":\"1\"}')",
+												"type": "Expression"
+											},
+											"additionalHeaders": {
+												"accept": "application/json",
+												"ApiOwner": "Shrijit",
+												"ApiKey": "754b261806fe43339313c224ab7603a87b9a5f0d518548de9d3de29",
+												"Content-Type": "application/x-www-form-urlencoded"
+											},
+											"paginationRules": {
+												"supportRFC5988": "true"
+											}
+										},
+										"sink": {
+											"type": "JsonSink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings"
+											},
+											"formatSettings": {
+												"type": "JsonWriteSettings"
+											}
+										},
+										"enableStaging": false
+									},
+									"inputs": [
+										{
+											"referenceName": "DS_REST_VinStock_AdjustmentDetail",
+											"type": "DatasetReference"
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "LS_JSON_VinStock_AdjustmentDetail",
+											"type": "DatasetReference"
+										}
+									]
+								},
+								{
+									"name": "Copy ADLSGEN 2",
+									"type": "Copy",
+									"dependsOn": [
+										{
+											"activity": "Copy IN as JSON",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "JsonSource",
+											"storeSettings": {
+												"type": "AzureBlobFSReadSettings",
+												"recursive": true,
+												"wildcardFolderPath": "VinStock_AdjustmentDetail/IN",
+												"wildcardFileName": "*.json",
+												"enablePartitionDiscovery": false
+											},
+											"formatSettings": {
+												"type": "JsonReadSettings"
+											}
+										},
+										"sink": {
+											"type": "SqlDWSink",
+											"allowCopyCommand": true
+										},
+										"enableStaging": true,
+										"stagingSettings": {
+											"linkedServiceName": {
+												"referenceName": "[parameters('LS_ADLSG2_DFXGP_EDW01_STG')]",
+												"type": "LinkedServiceReference"
+											},
+											"path": "staging-adjustmentdetail"
+										},
+										"translator": {
+											"type": "TabularTranslator",
+											"mappings": [
+												{
+													"source": {
+														"path": "[['id']"
+													},
+													"sink": {
+														"name": "id",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['skuCode']"
+													},
+													"sink": {
+														"name": "skuCode",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['imei']"
+													},
+													"sink": {
+														"name": "imei",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['imei2']"
+													},
+													"sink": {
+														"name": "imei2",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['imei3']"
+													},
+													"sink": {
+														"name": "imei3",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['bin']"
+													},
+													"sink": {
+														"name": "bin",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['bin_bucket']"
+													},
+													"sink": {
+														"name": "bin_bucket",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['qty']"
+													},
+													"sink": {
+														"name": "qty",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['location']"
+													},
+													"sink": {
+														"name": "location",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['reason']"
+													},
+													"sink": {
+														"name": "reason",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['remarks']"
+													},
+													"sink": {
+														"name": "remarks",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['cost']"
+													},
+													"sink": {
+														"name": "cost",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['createdBy']"
+													},
+													"sink": {
+														"name": "createdBy",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['createdDate']"
+													},
+													"sink": {
+														"name": "createdDate",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['updatedBy']"
+													},
+													"sink": {
+														"name": "updatedBy",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['updatedDate']"
+													},
+													"sink": {
+														"name": "updatedDate",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['udf1']"
+													},
+													"sink": {
+														"name": "udf1",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['udf2']"
+													},
+													"sink": {
+														"name": "udf2",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['udf3']"
+													},
+													"sink": {
+														"name": "udf3",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['udf4']"
+													},
+													"sink": {
+														"name": "udf4",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['udf5']"
+													},
+													"sink": {
+														"name": "udf5",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['udf6']"
+													},
+													"sink": {
+														"name": "udf6",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['udf7']"
+													},
+													"sink": {
+														"name": "udf7",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['udf8']"
+													},
+													"sink": {
+														"name": "udf8",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['udf9']"
+													},
+													"sink": {
+														"name": "udf9",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['udf10']"
+													},
+													"sink": {
+														"name": "udf110",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['lotno']"
+													},
+													"sink": {
+														"name": "lotno",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['lottable01']"
+													},
+													"sink": {
+														"name": "lottable_01",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['lottable02']"
+													},
+													"sink": {
+														"name": "lottable_02",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['lottable03']"
+													},
+													"sink": {
+														"name": "lottable_03",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['lottable04']"
+													},
+													"sink": {
+														"name": "lottable_04",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['lottable05']"
+													},
+													"sink": {
+														"name": "lottable_05",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['lottable06']"
+													},
+													"sink": {
+														"name": "lottable_06",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['lottable07']"
+													},
+													"sink": {
+														"name": "lottable_07",
+														"type": "String"
+													}
+												}
+											],
+											"collectionReference": "$['skuList']"
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "DS_ADLSGEN2_VinStock_AdjustmentDetail",
+											"type": "DatasetReference"
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "LS_Sink_VinStock_AdjustmentDetail",
+											"type": "DatasetReference"
+										}
+									]
+								},
+								{
+									"name": "Copy IN and OUT",
+									"type": "Copy",
+									"dependsOn": [
+										{
+											"activity": "Copy ADLSGEN 2",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "JsonSource",
+											"storeSettings": {
+												"type": "AzureBlobFSReadSettings",
+												"recursive": true,
+												"wildcardFolderPath": "VinStock_AdjustmentDetail/IN",
+												"wildcardFileName": "*.json",
+												"enablePartitionDiscovery": false
+											},
+											"formatSettings": {
+												"type": "JsonReadSettings"
+											}
+										},
+										"sink": {
+											"type": "JsonSink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings"
+											},
+											"formatSettings": {
+												"type": "JsonWriteSettings"
+											}
+										},
+										"enableStaging": false
+									},
+									"inputs": [
+										{
+											"referenceName": "DS_IN_VinStock_AdjustmentDetail",
+											"type": "DatasetReference"
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DS_OUT_VinStock_AdjustmentDetail",
+											"type": "DatasetReference"
+										}
+									]
+								},
+								{
+									"name": "Delete1",
+									"type": "Delete",
+									"dependsOn": [
+										{
+											"activity": "Copy IN and OUT",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"dataset": {
+											"referenceName": "DS_IN_VinStock_AdjustmentDetail",
+											"type": "DatasetReference"
+										},
+										"enableLogging": false,
+										"storeSettings": {
+											"type": "AzureBlobFSReadSettings",
+											"recursive": true,
+											"wildcardFileName": "*.json",
+											"enablePartitionDiscovery": false
+										}
+									}
+								}
+							]
+						}
+					},
+					{
+						"name": "Web1",
+						"type": "WebActivity",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"url": "https://duroflex.vineretail.com/RestWS/api/eretail/v1/stock/adjustmentDetail",
+							"method": "POST",
+							"headers": {
+								"accept": "application/json",
+								"ApiOwner": "Shrijit",
+								"ApiKey": "754b261806fe43339313c224ab7603a87b9a5f0d518548de9d3de29",
+								"Content-Type": "application/x-www-form-urlencoded"
+							},
+							"body": {
+								"value": "@concat('ApiOwner=Shrijit&ApiKey=754b261806fe43339313c224ab7603a87b9a5f0d518548de9d3de29&RequestBody= {\"skuCode\":[],\"location\":\"GGN\",\"date_from\":\"03/10/2022 00:00:00\",\"date_to\":\"09/10/2022 00:00:00\",\"pageNumber\":\"1\"}')",
+								"type": "Expression"
+							}
+						}
+					}
+				],
+				"folder": {
+					"name": "Vinculum-REST API"
+				},
+				"annotations": [],
+				"lastPublishTime": "2022-12-12T07:29:50Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/DS_REST_VinStock_AdjustmentDetail')]",
+				"[concat(variables('factoryId'), '/datasets/LS_JSON_VinStock_AdjustmentDetail')]",
+				"[concat(variables('factoryId'), '/datasets/DS_ADLSGEN2_VinStock_AdjustmentDetail')]",
+				"[concat(variables('factoryId'), '/datasets/LS_Sink_VinStock_AdjustmentDetail')]",
+				"[concat(variables('factoryId'), '/datasets/DS_IN_VinStock_AdjustmentDetail')]",
+				"[concat(variables('factoryId'), '/datasets/DS_OUT_VinStock_AdjustmentDetail')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_REST_VinStock_AdjustmentDetail')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_REST_VinStock_AdjustmentDetail')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "RestResource",
+				"schema": []
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/LS_JSON_VinStock_AdjustmentDetail')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_ADLSG2_DFXGP_EDW01_STG')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "Json",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"folderPath": "VinStock_AdjustmentDetail/IN",
+						"fileSystem": "fs-ci-dfxgp-vinculum"
+					}
+				},
+				"schema": {}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_ADLSGEN2_VinStock_AdjustmentDetail')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_ADLSG2_DFXGP_EDW01_STG')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "Json",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"folderPath": "VinStock_AdjustmentDetail/IN",
+						"fileSystem": "fs-ci-dfxgp-vinculum"
+					}
+				},
+				"schema": {}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/LS_Sink_VinStock_AdjustmentDetail')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_AzSynapse_DFXGP_EDW01')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "AzureSqlDWTable",
+				"schema": [
+					{
+						"name": "id",
+						"type": "varchar"
+					},
+					{
+						"name": "skuCode",
+						"type": "varchar"
+					},
+					{
+						"name": "imei",
+						"type": "varchar"
+					},
+					{
+						"name": "imei2",
+						"type": "varchar"
+					},
+					{
+						"name": "imei3",
+						"type": "varchar"
+					},
+					{
+						"name": "bin",
+						"type": "varchar"
+					},
+					{
+						"name": "bin_bucket",
+						"type": "varchar"
+					},
+					{
+						"name": "qty",
+						"type": "varchar"
+					},
+					{
+						"name": "location",
+						"type": "varchar"
+					},
+					{
+						"name": "reason",
+						"type": "varchar"
+					},
+					{
+						"name": "remarks",
+						"type": "varchar"
+					},
+					{
+						"name": "createdBy",
+						"type": "varchar"
+					},
+					{
+						"name": "createdDate",
+						"type": "varchar"
+					},
+					{
+						"name": "updatedBy",
+						"type": "varchar"
+					},
+					{
+						"name": "updatedDate",
+						"type": "varchar"
+					},
+					{
+						"name": "udf1",
+						"type": "varchar"
+					},
+					{
+						"name": "udf2",
+						"type": "varchar"
+					},
+					{
+						"name": "udf3",
+						"type": "varchar"
+					},
+					{
+						"name": "udf4",
+						"type": "varchar"
+					},
+					{
+						"name": "udf5",
+						"type": "varchar"
+					},
+					{
+						"name": "udf6",
+						"type": "varchar"
+					},
+					{
+						"name": "udf7",
+						"type": "varchar"
+					},
+					{
+						"name": "udf8",
+						"type": "varchar"
+					},
+					{
+						"name": "udf9",
+						"type": "varchar"
+					},
+					{
+						"name": "udf110",
+						"type": "varchar"
+					},
+					{
+						"name": "lotno",
+						"type": "varchar"
+					},
+					{
+						"name": "lottable_01",
+						"type": "varchar"
+					},
+					{
+						"name": "lottable_02",
+						"type": "varchar"
+					},
+					{
+						"name": "lottable_03",
+						"type": "varchar"
+					},
+					{
+						"name": "lottable_04",
+						"type": "varchar"
+					},
+					{
+						"name": "lottable_05",
+						"type": "varchar"
+					},
+					{
+						"name": "lottable_06",
+						"type": "varchar"
+					},
+					{
+						"name": "lottable_07",
+						"type": "varchar"
+					},
+					{
+						"name": "cost",
+						"type": "varchar"
+					}
+				],
+				"typeProperties": {
+					"schema": "STG_Duroflex_BI",
+					"table": "STG_VinStock_AdjustmentDetail"
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_IN_VinStock_AdjustmentDetail')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_ADLSG2_DFXGP_EDW01_STG')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "Json",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"folderPath": "VinStock_AdjustmentDetail/IN",
+						"fileSystem": "fs-ci-dfxgp-vinculum"
+					}
+				},
+				"schema": {}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_OUT_VinStock_AdjustmentDetail')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_ADLSG2_DFXGP_EDW01_STG')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "Json",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"folderPath": "VinStock_AdjustmentDetail/OUT",
+						"fileSystem": "fs-ci-dfxgp-vinculum"
+					}
+				},
+				"schema": {}
+			},
+			"dependsOn": []
+		}
+	]
+}
