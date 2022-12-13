@@ -1,0 +1,720 @@
+{
+	"$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"factoryName": {
+			"type": "string",
+			"metadata": "Data Factory name"
+		},
+		"LS_ADLSG2_DFXGP_EDW01_STG": {
+			"type": "string"
+		},
+		"LS_AzSynapse_DFXGP_EDW01": {
+			"type": "string"
+		},
+		"LS_REST_VinPurchaseOrder_getlotlevelinventory": {
+			"type": "string"
+		}
+	},
+	"variables": {
+		"factoryId": "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]"
+	},
+	"resources": [
+		{
+			"name": "[concat(parameters('factoryName'), '/pip_vinculum_PurchaseOrder_InventoryLotStatus')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Web1",
+						"type": "WebActivity",
+						"dependsOn": [
+							{
+								"activity": "Stored procedure1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"url": "https://duroflex.vineretail.com/RestWS/api/eretail/v1/sku/getlotlevelinventory",
+							"method": "POST",
+							"headers": {
+								"accept": "application/json",
+								"ApiOwner": "Shrijit",
+								"ApiKey": " 754b261806fe43339313c224ab7603a87b9a5f0d518548de9d3de29",
+								"Content-Type": "application/x-www-form-urlencoded"
+							},
+							"body": {
+								"value": "@concat('ApiOwner=Shrijit&ApiKey=754b261806fe43339313c224ab7603a87b9a5f0d518548de9d3de29&RequestBody= {\"skuCodes\":[],\"fromDate\":\"15/10/2022 00:00:00\",\"toDate\":\"21/10/2022 00:00:00\",\"pageNumber\":\"1\",\"locCode\":\"\",\"extLocCode\":\"\"}')",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "Copy IN as JSON",
+						"type": "Copy",
+						"dependsOn": [
+							{
+								"activity": "Web1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "RestSource",
+								"httpRequestTimeout": "00:01:40",
+								"requestInterval": "00.00:00:00.010",
+								"requestMethod": "POST",
+								"requestBody": {
+									"value": "@concat('ApiOwner=Shrijit&ApiKey=754b261806fe43339313c224ab7603a87b9a5f0d518548de9d3de29&RequestBody= {\"skuCodes\":[],\"fromDate\":\"15/10/2022 00:00:00\",\"toDate\":\"21/10/2022 00:00:00\",\"pageNumber\":\"1\",\"locCode\":\"\",\"extLocCode\":\"\"}')",
+									"type": "Expression"
+								},
+								"additionalHeaders": {
+									"accept": "application/json",
+									"ApiOwner": "Shrijit",
+									"ApiKey": "754b261806fe43339313c224ab7603a87b9a5f0d518548de9d3de29",
+									"Content-Type": "application/x-www-form-urlencoded"
+								},
+								"paginationRules": {
+									"supportRFC5988": "true"
+								}
+							},
+							"sink": {
+								"type": "JsonSink",
+								"storeSettings": {
+									"type": "AzureBlobFSWriteSettings"
+								},
+								"formatSettings": {
+									"type": "JsonWriteSettings"
+								}
+							},
+							"enableStaging": false
+						},
+						"inputs": [
+							{
+								"referenceName": "DS_REST_VinPuchaseOrder_getlotlevelinventory",
+								"type": "DatasetReference"
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "LS_REST_VIN_GetLotInventory",
+								"type": "DatasetReference"
+							}
+						]
+					},
+					{
+						"name": "Copy ADLSGEN 2",
+						"type": "Copy",
+						"dependsOn": [
+							{
+								"activity": "Copy IN as JSON",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "JsonSource",
+								"storeSettings": {
+									"type": "AzureBlobFSReadSettings",
+									"recursive": true,
+									"wildcardFolderPath": "Vin_GetLotInventory/IN",
+									"wildcardFileName": "*.json",
+									"enablePartitionDiscovery": false
+								},
+								"formatSettings": {
+									"type": "JsonReadSettings"
+								}
+							},
+							"sink": {
+								"type": "SqlDWSink",
+								"allowCopyCommand": true
+							},
+							"enableStaging": true,
+							"stagingSettings": {
+								"linkedServiceName": {
+									"referenceName": "[parameters('LS_ADLSG2_DFXGP_EDW01_STG')]",
+									"type": "LinkedServiceReference"
+								},
+								"path": "staging-getlotinventory"
+							},
+							"translator": {
+								"type": "TabularTranslator",
+								"mappings": [
+									{
+										"source": {
+											"path": "[['skuCode']"
+										},
+										"sink": {
+											"name": "skuCode"
+										}
+									},
+									{
+										"source": {
+											"path": "[['location']"
+										},
+										"sink": {
+											"name": "location"
+										}
+									},
+									{
+										"source": {
+											"path": "[['qty']"
+										},
+										"sink": {
+											"name": "qty"
+										}
+									},
+									{
+										"source": {
+											"path": "[['bucket']"
+										},
+										"sink": {
+											"name": "bucket"
+										}
+									},
+									{
+										"source": {
+											"path": "[['committedQty']"
+										},
+										"sink": {
+											"name": "committedQty"
+										}
+									},
+									{
+										"source": {
+											"path": "[['lotNo']"
+										},
+										"sink": {
+											"name": "lotNo"
+										}
+									},
+									{
+										"source": {
+											"path": "[['lottable_01']"
+										},
+										"sink": {
+											"name": "lottable_01"
+										}
+									},
+									{
+										"source": {
+											"path": "[['lottable_02']"
+										},
+										"sink": {
+											"name": "lottable_02"
+										}
+									},
+									{
+										"source": {
+											"path": "[['lottable_03']"
+										},
+										"sink": {
+											"name": "lottable_03"
+										}
+									},
+									{
+										"source": {
+											"path": "[['lottable_04']"
+										},
+										"sink": {
+											"name": "lottable_04"
+										}
+									},
+									{
+										"source": {
+											"path": "[['lottable_05']"
+										},
+										"sink": {
+											"name": "lottable_05"
+										}
+									},
+									{
+										"source": {
+											"path": "[['lottable_06']"
+										},
+										"sink": {
+											"name": "lottable_06"
+										}
+									},
+									{
+										"source": {
+											"path": "[['lottable_07']"
+										},
+										"sink": {
+											"name": "lottable_07"
+										}
+									},
+									{
+										"source": {
+											"path": "[['shelflife']"
+										},
+										"sink": {
+											"name": "shelflife"
+										}
+									},
+									{
+										"source": {
+											"path": "[['eanCode']"
+										},
+										"sink": {
+											"name": "eanCode"
+										}
+									},
+									{
+										"source": {
+											"path": "[['binCode']"
+										},
+										"sink": {
+											"name": "binCode"
+										}
+									},
+									{
+										"source": {
+											"path": "[['extLocCode']"
+										},
+										"sink": {
+											"name": "extLocCode"
+										}
+									}
+								],
+								"collectionReference": "$['response']"
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "DS_ADLSGEN2_VinGetLotInventory",
+								"type": "DatasetReference"
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "LS_Sink_VinPurchaseOrder_getlotlevelinventory",
+								"type": "DatasetReference"
+							}
+						]
+					},
+					{
+						"name": "Copy IN and OUT",
+						"type": "Copy",
+						"dependsOn": [
+							{
+								"activity": "Copy ADLSGEN 2",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "JsonSource",
+								"storeSettings": {
+									"type": "AzureBlobFSReadSettings",
+									"recursive": true,
+									"wildcardFolderPath": "Vin_GetLotInventory/IN",
+									"wildcardFileName": "*.json",
+									"enablePartitionDiscovery": false
+								},
+								"formatSettings": {
+									"type": "JsonReadSettings"
+								}
+							},
+							"sink": {
+								"type": "JsonSink",
+								"storeSettings": {
+									"type": "AzureBlobFSWriteSettings"
+								},
+								"formatSettings": {
+									"type": "JsonWriteSettings"
+								}
+							},
+							"enableStaging": false
+						},
+						"inputs": [
+							{
+								"referenceName": "DS_IN_Vin_GetLotInventory",
+								"type": "DatasetReference"
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "DS_OUT_Vin_GetLotInventory",
+								"type": "DatasetReference"
+							}
+						]
+					},
+					{
+						"name": "Delete1",
+						"type": "Delete",
+						"dependsOn": [
+							{
+								"activity": "Copy IN and OUT",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"dataset": {
+								"referenceName": "DS_IN_Vin_GetLotInventory",
+								"type": "DatasetReference"
+							},
+							"enableLogging": false,
+							"storeSettings": {
+								"type": "AzureBlobFSReadSettings",
+								"recursive": true,
+								"wildcardFileName": "*.json",
+								"enablePartitionDiscovery": false
+							}
+						}
+					},
+					{
+						"name": "Stored procedure1",
+						"type": "SqlServerStoredProcedure",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"storedProcedureName": "[[STG_Duroflex_BI].[STG_VINPurchaseOrder_GetLotInventory_SP]"
+						},
+						"linkedServiceName": {
+							"referenceName": "[parameters('LS_AzSynapse_DFXGP_EDW01')]",
+							"type": "LinkedServiceReference"
+						}
+					}
+				],
+				"folder": {
+					"name": "Vinculum-REST API"
+				},
+				"annotations": [],
+				"lastPublishTime": "2022-12-12T06:44:37Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/DS_REST_VinPuchaseOrder_getlotlevelinventory')]",
+				"[concat(variables('factoryId'), '/datasets/LS_REST_VIN_GetLotInventory')]",
+				"[concat(variables('factoryId'), '/datasets/DS_ADLSGEN2_VinGetLotInventory')]",
+				"[concat(variables('factoryId'), '/datasets/LS_Sink_VinPurchaseOrder_getlotlevelinventory')]",
+				"[concat(variables('factoryId'), '/datasets/DS_IN_Vin_GetLotInventory')]",
+				"[concat(variables('factoryId'), '/datasets/DS_OUT_Vin_GetLotInventory')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_REST_VinPuchaseOrder_getlotlevelinventory')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_REST_VinPurchaseOrder_getlotlevelinventory')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "RestResource",
+				"schema": []
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/LS_REST_VIN_GetLotInventory')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_ADLSG2_DFXGP_EDW01_STG')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "Json",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"folderPath": "Vin_GetLotInventory/IN",
+						"fileSystem": "fs-ci-dfxgp-vinculum"
+					}
+				},
+				"schema": {}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_ADLSGEN2_VinGetLotInventory')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_ADLSG2_DFXGP_EDW01_STG')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "Json",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"folderPath": "Vin_GetLotInventory/IN",
+						"fileSystem": "fs-ci-dfxgp-vinculum"
+					}
+				},
+				"schema": {
+					"type": "object",
+					"properties": {
+						"responseCode": {
+							"type": "integer"
+						},
+						"responseMessage": {
+							"type": "string"
+						},
+						"hasMore": {
+							"type": "boolean"
+						},
+						"currentPage": {
+							"type": "integer"
+						},
+						"response": {
+							"type": "array",
+							"items": {
+								"type": "object",
+								"properties": {
+									"skuCode": {
+										"type": "string"
+									},
+									"location": {
+										"type": "string"
+									},
+									"qty": {
+										"type": "number"
+									},
+									"bucket": {
+										"type": "string"
+									},
+									"committedQty": {
+										"type": "number"
+									},
+									"lotNo": {
+										"type": "string"
+									},
+									"lottable_01": {
+										"type": "string"
+									},
+									"lottable_02": {
+										"type": "string"
+									},
+									"lottable_03": {
+										"type": "string"
+									},
+									"lottable_04": {
+										"type": "string"
+									},
+									"lottable_05": {
+										"type": "string"
+									},
+									"lottable_06": {
+										"type": "string"
+									},
+									"lottable_07": {
+										"type": "string"
+									},
+									"shelflife": {
+										"type": "string"
+									},
+									"eanCode": {
+										"type": "string"
+									},
+									"binCode": {
+										"type": "string"
+									},
+									"extLocCode": {
+										"type": "string"
+									}
+								}
+							}
+						}
+					}
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/LS_Sink_VinPurchaseOrder_getlotlevelinventory')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_AzSynapse_DFXGP_EDW01')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "AzureSqlDWTable",
+				"schema": [
+					{
+						"name": "skuCode",
+						"type": "varchar"
+					},
+					{
+						"name": "location",
+						"type": "varchar"
+					},
+					{
+						"name": "qty",
+						"type": "varchar"
+					},
+					{
+						"name": "bucket",
+						"type": "varchar"
+					},
+					{
+						"name": "committedQty",
+						"type": "varchar"
+					},
+					{
+						"name": "lotNo",
+						"type": "varchar"
+					},
+					{
+						"name": "lottable_01",
+						"type": "varchar"
+					},
+					{
+						"name": "lottable_02",
+						"type": "varchar"
+					},
+					{
+						"name": "lottable_03",
+						"type": "varchar"
+					},
+					{
+						"name": "lottable_04",
+						"type": "varchar"
+					},
+					{
+						"name": "lottable_05",
+						"type": "varchar"
+					},
+					{
+						"name": "lottable_06",
+						"type": "varchar"
+					},
+					{
+						"name": "lottable_07",
+						"type": "varchar"
+					},
+					{
+						"name": "shelflife",
+						"type": "varchar"
+					},
+					{
+						"name": "eanCode",
+						"type": "varchar"
+					},
+					{
+						"name": "binCode",
+						"type": "varchar"
+					},
+					{
+						"name": "extLocCode",
+						"type": "varchar"
+					}
+				],
+				"typeProperties": {
+					"schema": "STG_Duroflex_BI",
+					"table": "STG_VinPurchaseOrder_ getlotlevelinventory"
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_IN_Vin_GetLotInventory')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_ADLSG2_DFXGP_EDW01_STG')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "Json",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"folderPath": "Vin_GetLotInventory/IN",
+						"fileSystem": "fs-ci-dfxgp-vinculum"
+					}
+				},
+				"schema": {}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_OUT_Vin_GetLotInventory')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "[parameters('LS_ADLSG2_DFXGP_EDW01_STG')]",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "Json",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"folderPath": "Vin_GetLotInventory/OUT",
+						"fileSystem": "fs-ci-dfxgp-vinculum"
+					}
+				},
+				"schema": {}
+			},
+			"dependsOn": []
+		}
+	]
+}
