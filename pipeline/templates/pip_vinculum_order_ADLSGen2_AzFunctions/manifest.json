@@ -28,5 +28,8 @@
 	"author": "krithikka.s@quadrasystems.net",
 	"annotations": [],
 	"services": [],
+	"folder": {
+		"name": "Vinculum"
+	},
 	"categories": []
 }
