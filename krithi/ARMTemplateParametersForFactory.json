@@ -1,0 +1,21 @@
+{
+	"$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"factoryName": {
+			"value": "krithi"
+		},
+		"AzureDataLakeStorage1_accountKey": {
+			"value": ""
+		},
+		"LS_Duroflex_accountKey": {
+			"value": ""
+		},
+		"AzureDataLakeStorage1_properties_typeProperties_url": {
+			"value": "https://krithiblob.dfs.core.windows.net/"
+		},
+		"LS_Duroflex_properties_typeProperties_url": {
+			"value": "https://asadf.dfs.core.windows.net/"
+		}
+	}
+}
